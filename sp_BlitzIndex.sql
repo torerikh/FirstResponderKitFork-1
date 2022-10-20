@@ -3027,1863 +3027,1863 @@ BEGIN
 
 	IF @Mode IN (0, 4) /* DIAGNOSE */
 	BEGIN;
-		IF @Mode IN (0, 4) /* DIAGNOSE priorities 1-100 */
-		BEGIN;
-			RAISERROR(N'@Mode=0 or 4, running rules for priorities 1-100.', 0,1) WITH NOWAIT;
+	IF @Mode IN (0, 4) /* DIAGNOSE priorities 1-100 */
+	BEGIN;
+        RAISERROR(N'@Mode=0 or 4, running rules for priorities 1-100.', 0,1) WITH NOWAIT;
 
-			----------------------------------------
-			--Multiple Index Personalities: Check_id 0-10
-			----------------------------------------
-			RAISERROR('check_id 1: Duplicate keys', 0,1) WITH NOWAIT;
-				WITH    duplicate_indexes
-						  AS ( SELECT  [object_id], key_column_names, database_id, [schema_name]
-							   FROM        #IndexSanity AS ip
-							   WHERE  index_type IN (1,2) /* Clustered, NC only*/
-									AND is_hypothetical = 0
-									AND is_disabled = 0
-									AND is_primary_key = 0
-									AND EXISTS (
-												SELECT 1/0
-												FROM #IndexSanitySize ips 
-												WHERE ip.index_sanity_id = ips.index_sanity_id 
-												AND ip.database_id = ips.database_id
-												AND ip.schema_name = ips.schema_name
-												AND ips.total_reserved_MB >= CASE 
-																			 WHEN (@GetAllDatabases = 1 OR @Mode = 0) 
-																			 THEN @ThresholdMB 
-																			 ELSE ips.total_reserved_MB 
-																			 END
-												)
-							   GROUP BY    [object_id], key_column_names, database_id, [schema_name]
-							   HAVING    COUNT(*) > 1)
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  1 AS check_id, 
-									ip.index_sanity_id,
-									20 AS Priority,
-									'Multiple Index Personalities' AS findings_group,
-									'Duplicate keys' AS finding,
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/duplicateindex' AS URL,
-									N'Index Name: ' + ip.index_name + N' Table Name: ' + ip.db_schema_object_name AS details,
-									ip.index_definition, 
-									ip.secret_columns, 
-									ip.index_usage_summary,
-									ips.index_size_summary
-							FROM    duplicate_indexes di
-									JOIN #IndexSanity ip ON di.[object_id] = ip.[object_id]
-															 AND ip.database_id = di.database_id
-															 AND ip.[schema_name] = di.[schema_name]
-															 AND di.key_column_names = ip.key_column_names
-									JOIN #IndexSanitySize ips ON ip.index_sanity_id = ips.index_sanity_id 
-															  AND ip.database_id = ips.database_id
-															  AND ip.schema_name = ips.schema_name
-							/* WHERE clause limits to only @ThresholdMB or larger duplicate indexes when getting all databases or using PainRelief mode */
-							WHERE ips.total_reserved_MB >= CASE WHEN (@GetAllDatabases = 1 OR @Mode = 0) THEN @ThresholdMB ELSE ips.total_reserved_MB END
-							AND ip.is_primary_key = 0
-							ORDER BY ips.total_rows DESC, ip.[schema_name], ip.[object_name], ip.key_column_names_with_sort_order    
-					OPTION    ( RECOMPILE );
+        ----------------------------------------
+        --Multiple Index Personalities: Check_id 0-10
+        ----------------------------------------
+        RAISERROR('check_id 1: Duplicate keys', 0,1) WITH NOWAIT;
+            WITH    duplicate_indexes
+                      AS ( SELECT  [object_id], key_column_names, database_id, [schema_name]
+                           FROM        #IndexSanity AS ip
+                           WHERE  index_type IN (1,2) /* Clustered, NC only*/
+                                AND is_hypothetical = 0
+                                AND is_disabled = 0
+								AND is_primary_key = 0
+								AND EXISTS (
+											SELECT 1/0
+											FROM #IndexSanitySize ips 
+											WHERE ip.index_sanity_id = ips.index_sanity_id 
+								            AND ip.database_id = ips.database_id
+											AND ip.schema_name = ips.schema_name
+								            AND ips.total_reserved_MB >= CASE 
+											                             WHEN (@GetAllDatabases = 1 OR @Mode = 0) 
+																		 THEN @ThresholdMB 
+																		 ELSE ips.total_reserved_MB 
+																		 END
+								            )
+                           GROUP BY    [object_id], key_column_names, database_id, [schema_name]
+                           HAVING    COUNT(*) > 1)
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  1 AS check_id, 
+                                ip.index_sanity_id,
+                                20 AS Priority,
+                                'Multiple Index Personalities' AS findings_group,
+                                'Duplicate keys' AS finding,
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/duplicateindex' AS URL,
+                                N'Index Name: ' + ip.index_name + N' Table Name: ' + ip.db_schema_object_name AS details,
+                                ip.index_definition, 
+                                ip.secret_columns, 
+                                ip.index_usage_summary,
+                                ips.index_size_summary
+                        FROM    duplicate_indexes di
+                                JOIN #IndexSanity ip ON di.[object_id] = ip.[object_id]
+                                                         AND ip.database_id = di.database_id
+														 AND ip.[schema_name] = di.[schema_name]
+                                                         AND di.key_column_names = ip.key_column_names
+                                JOIN #IndexSanitySize ips ON ip.index_sanity_id = ips.index_sanity_id 
+								                          AND ip.database_id = ips.database_id
+														  AND ip.schema_name = ips.schema_name
+                        /* WHERE clause limits to only @ThresholdMB or larger duplicate indexes when getting all databases or using PainRelief mode */
+                        WHERE ips.total_reserved_MB >= CASE WHEN (@GetAllDatabases = 1 OR @Mode = 0) THEN @ThresholdMB ELSE ips.total_reserved_MB END
+						AND ip.is_primary_key = 0
+                        ORDER BY ips.total_rows DESC, ip.[schema_name], ip.[object_name], ip.key_column_names_with_sort_order    
+                OPTION    ( RECOMPILE );
 
-			RAISERROR('check_id 2: Keys w/ identical leading columns.', 0,1) WITH NOWAIT;
-				WITH    borderline_duplicate_indexes
-						  AS ( SELECT DISTINCT database_id, [object_id], first_key_column_name, key_column_names,
-										COUNT([object_id]) OVER ( PARTITION BY database_id, [object_id], first_key_column_name ) AS number_dupes
-							   FROM        #IndexSanity
-							   WHERE index_type IN (1,2) /* Clustered, NC only*/
-								AND is_hypothetical=0
-								AND is_disabled=0
-								AND is_primary_key = 0)
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  2 AS check_id, 
-									ip.index_sanity_id,
-									30 AS Priority,
-									'Multiple Index Personalities' AS findings_group,
-									'Borderline duplicate keys' AS finding,
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/duplicateindex' AS URL,
-									ip.db_schema_object_indexid AS details, 
-									ip.index_definition, 
-									ip.secret_columns,
-									ip.index_usage_summary,
-									ips.index_size_summary
-							FROM    #IndexSanity AS ip 
-							JOIN #IndexSanitySize ips ON ip.index_sanity_id = ips.index_sanity_id
-							WHERE EXISTS (
-								SELECT di.[object_id]
-								FROM borderline_duplicate_indexes AS di
-								WHERE di.[object_id] = ip.[object_id] AND
-									di.database_id = ip.database_id AND
-									di.first_key_column_name = ip.first_key_column_name AND
-									di.key_column_names <> ip.key_column_names AND
-									di.number_dupes > 1    
-							)
-							AND ip.is_primary_key = 0                                          
-							ORDER BY ips.total_rows DESC, ip.[schema_name], ip.[object_name], ip.key_column_names, ip.include_column_names
-				OPTION    ( RECOMPILE );
+        RAISERROR('check_id 2: Keys w/ identical leading columns.', 0,1) WITH NOWAIT;
+            WITH    borderline_duplicate_indexes
+                      AS ( SELECT DISTINCT database_id, [object_id], first_key_column_name, key_column_names,
+                                    COUNT([object_id]) OVER ( PARTITION BY database_id, [object_id], first_key_column_name ) AS number_dupes
+                           FROM        #IndexSanity
+                           WHERE index_type IN (1,2) /* Clustered, NC only*/
+                            AND is_hypothetical=0
+                            AND is_disabled=0
+							AND is_primary_key = 0)
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  2 AS check_id, 
+                                ip.index_sanity_id,
+                                30 AS Priority,
+                                'Multiple Index Personalities' AS findings_group,
+                                'Borderline duplicate keys' AS finding,
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/duplicateindex' AS URL,
+                                ip.db_schema_object_indexid AS details, 
+                                ip.index_definition, 
+                                ip.secret_columns,
+                                ip.index_usage_summary,
+                                ips.index_size_summary
+                        FROM    #IndexSanity AS ip 
+                        JOIN #IndexSanitySize ips ON ip.index_sanity_id = ips.index_sanity_id
+                        WHERE EXISTS (
+                            SELECT di.[object_id]
+                            FROM borderline_duplicate_indexes AS di
+                            WHERE di.[object_id] = ip.[object_id] AND
+                                di.database_id = ip.database_id AND
+                                di.first_key_column_name = ip.first_key_column_name AND
+                                di.key_column_names <> ip.key_column_names AND
+                                di.number_dupes > 1    
+                        )
+						AND ip.is_primary_key = 0                                          
+                        ORDER BY ips.total_rows DESC, ip.[schema_name], ip.[object_name], ip.key_column_names, ip.include_column_names
+            OPTION    ( RECOMPILE );
 
-			----------------------------------------
-			--Aggressive Indexes: Check_id 10-19
-			----------------------------------------
+        ----------------------------------------
+        --Aggressive Indexes: Check_id 10-19
+        ----------------------------------------
 
-			RAISERROR(N'check_id 11: Total lock wait time > 5 minutes (row + page)', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-					SELECT  11 AS check_id, 
-							i.index_sanity_id,
-							70 AS Priority,
-							N'Aggressive ' 
-								+ CASE COALESCE((SELECT SUM(1) 
-												 FROM #IndexSanity iMe 
-												 INNER JOIN #IndexSanity iOthers 
-													ON iMe.database_id = iOthers.database_id 
-													AND iMe.object_id = iOthers.object_id 
-													AND iOthers.index_id > 1 
-												 WHERE i.index_sanity_id = iMe.index_sanity_id
-													AND iOthers.is_hypothetical = 0
-													AND iOthers.is_disabled = 0
-												), 0)
-									WHEN 0 THEN N'Under-Indexing'
-									WHEN 1 THEN N'Under-Indexing'
-									WHEN 2 THEN N'Under-Indexing'
-									WHEN 3 THEN N'Under-Indexing'
-									WHEN 4 THEN N'Indexes'
-									WHEN 5 THEN N'Indexes'
-									WHEN 6 THEN N'Indexes'
-									WHEN 7 THEN N'Indexes'
-									WHEN 8 THEN N'Indexes'
-									WHEN 9 THEN N'Indexes'
-									ELSE N'Over-Indexing'
-									END AS findings_group,
-							N'Total lock wait time > 5 minutes (row + page)' AS finding, 
-							[database_name] AS [Database Name],
-							N'https://www.brentozar.com/go/AggressiveIndexes' AS URL,
-							(i.db_schema_object_indexid + N': ' +
-								sz.index_lock_wait_summary + N' NC indexes on table: ') COLLATE DATABASE_DEFAULT +
-								 CAST(COALESCE((SELECT SUM(1) 
-												FROM #IndexSanity iMe 
-												INNER JOIN #IndexSanity iOthers 
-													ON iMe.database_id = iOthers.database_id 
-													AND iMe.object_id = iOthers.object_id 
-													AND iOthers.index_id > 1 
-												WHERE i.index_sanity_id = iMe.index_sanity_id
+        RAISERROR(N'check_id 11: Total lock wait time > 5 minutes (row + page)', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                SELECT  11 AS check_id, 
+                        i.index_sanity_id,
+                        70 AS Priority,
+                        N'Aggressive ' 
+                            + CASE COALESCE((SELECT SUM(1) 
+							                 FROM #IndexSanity iMe 
+											 INNER JOIN #IndexSanity iOthers 
+												ON iMe.database_id = iOthers.database_id 
+												AND iMe.object_id = iOthers.object_id 
+												AND iOthers.index_id > 1 
+											 WHERE i.index_sanity_id = iMe.index_sanity_id
 												AND iOthers.is_hypothetical = 0
 												AND iOthers.is_disabled = 0
-											   ), 0)
-											 AS NVARCHAR(30))	 AS details, 
-							i.index_definition,
-							i.secret_columns,
-							i.index_usage_summary,
-							sz.index_size_summary
-					FROM    #IndexSanity AS i
-					JOIN #IndexSanitySize AS sz ON i.index_sanity_id = sz.index_sanity_id
-					WHERE    (total_row_lock_wait_in_ms + total_page_lock_wait_in_ms) > 300000
-					GROUP BY i.index_sanity_id, [database_name], i.db_schema_object_indexid, sz.index_lock_wait_summary, i.index_definition, i.secret_columns, i.index_usage_summary, sz.index_size_summary, sz.index_sanity_id
-					ORDER BY SUM(total_row_lock_wait_in_ms + total_page_lock_wait_in_ms) DESC, 4, [database_name], 8
-					OPTION    ( RECOMPILE );
+											), 0)
+                                WHEN 0 THEN N'Under-Indexing'
+                                WHEN 1 THEN N'Under-Indexing'
+                                WHEN 2 THEN N'Under-Indexing'
+                                WHEN 3 THEN N'Under-Indexing'
+                                WHEN 4 THEN N'Indexes'
+                                WHEN 5 THEN N'Indexes'
+                                WHEN 6 THEN N'Indexes'
+                                WHEN 7 THEN N'Indexes'
+                                WHEN 8 THEN N'Indexes'
+                                WHEN 9 THEN N'Indexes'
+                                ELSE N'Over-Indexing'
+                                END AS findings_group,
+                        N'Total lock wait time > 5 minutes (row + page)' AS finding, 
+                        [database_name] AS [Database Name],
+                        N'https://www.brentozar.com/go/AggressiveIndexes' AS URL,
+                        (i.db_schema_object_indexid + N': ' +
+                            sz.index_lock_wait_summary + N' NC indexes on table: ') COLLATE DATABASE_DEFAULT +
+							 CAST(COALESCE((SELECT SUM(1) 
+							                FROM #IndexSanity iMe 
+											INNER JOIN #IndexSanity iOthers 
+												ON iMe.database_id = iOthers.database_id 
+												AND iMe.object_id = iOthers.object_id 
+												AND iOthers.index_id > 1 
+											WHERE i.index_sanity_id = iMe.index_sanity_id
+											AND iOthers.is_hypothetical = 0
+											AND iOthers.is_disabled = 0
+										   ), 0)
+                                         AS NVARCHAR(30))	 AS details, 
+                        i.index_definition,
+                        i.secret_columns,
+                        i.index_usage_summary,
+                        sz.index_size_summary
+                FROM    #IndexSanity AS i
+                JOIN #IndexSanitySize AS sz ON i.index_sanity_id = sz.index_sanity_id
+                WHERE    (total_row_lock_wait_in_ms + total_page_lock_wait_in_ms) > 300000
+				GROUP BY i.index_sanity_id, [database_name], i.db_schema_object_indexid, sz.index_lock_wait_summary, i.index_definition, i.secret_columns, i.index_usage_summary, sz.index_size_summary, sz.index_sanity_id
+                ORDER BY SUM(total_row_lock_wait_in_ms + total_page_lock_wait_in_ms) DESC, 4, [database_name], 8
+                OPTION    ( RECOMPILE );
 
 
 
-			---------------------------------------- 
-			--Index Hoarder: Check_id 20-29
-			----------------------------------------
-				RAISERROR(N'check_id 20: >= 10 NC indexes on any given table. Yes, 10 is an arbitrary number.', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  20 AS check_id, 
-									MAX(i.index_sanity_id) AS index_sanity_id, 
-									10 AS Priority,
-									'Index Hoarder' AS findings_group,
-									'Many NC Indexes on a Single Table' AS finding,
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/IndexHoarder' AS URL,
-									CAST (COUNT(*) AS NVARCHAR(30)) + ' NC indexes on ' + i.db_schema_object_name AS details,
-									i.db_schema_object_name + ' (' + CAST (COUNT(*) AS NVARCHAR(30)) + ' indexes)' AS index_definition,
-									'' AS secret_columns,
-									REPLACE(CONVERT(NVARCHAR(30),CAST(SUM(total_reads) AS MONEY), 1), N'.00', N'') + N' reads (ALL); '
-										+ REPLACE(CONVERT(NVARCHAR(30),CAST(SUM(user_updates) AS MONEY), 1), N'.00', N'') + N' writes (ALL); ',
-									REPLACE(CONVERT(NVARCHAR(30),CAST(MAX(total_rows) AS MONEY), 1), N'.00', N'') + N' rows (MAX)'
-										+ CASE WHEN SUM(total_reserved_MB) > 1024 THEN 
-											N'; ' + CAST(CAST(SUM(total_reserved_MB)/1024. AS NUMERIC(29,1)) AS NVARCHAR(30)) + 'GB (ALL)'
-										WHEN SUM(total_reserved_MB) > 0 THEN
-											N'; ' + CAST(CAST(SUM(total_reserved_MB) AS NUMERIC(29,1)) AS NVARCHAR(30)) + 'MB (ALL)'
-										ELSE ''
-										END AS index_size_summary
-							FROM    #IndexSanity i
-							JOIN #IndexSanitySize ip ON i.index_sanity_id = ip.index_sanity_id
-							WHERE    index_id NOT IN ( 0, 1 )
-							GROUP BY db_schema_object_name, [i].[database_name]
-							HAVING    COUNT(*) >= 10
-							ORDER BY i.db_schema_object_name DESC  
-							OPTION    ( RECOMPILE );
-
-					RAISERROR(N'check_id 22: NC indexes with 0 reads. (Borderline) and >= 10,000 writes', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  22 AS check_id, 
-									i.index_sanity_id,
-									10 AS Priority,
-									N'Index Hoarder' AS findings_group,
-									N'Unused NC Index with High Writes' AS finding, 
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/IndexHoarder' AS URL,
-									N'Reads: 0,'
-									+ N' Writes: ' 
-									+ REPLACE(CONVERT(NVARCHAR(30), CAST((i.user_updates) AS MONEY), 1), N'.00', N'')
-									+ N' on: '
-									+ i.db_schema_object_indexid
-									AS details, 
-									i.index_definition, 
-									i.secret_columns, 
-									i.index_usage_summary,
-									sz.index_size_summary
-							FROM    #IndexSanity AS i
-							JOIN    #IndexSanitySize AS sz ON i.index_sanity_id = sz.index_sanity_id
-							WHERE    i.total_reads=0
-								AND i.user_updates >= 10000
-									AND i.index_id NOT IN (0,1) /*NCs only*/
-									AND i.is_unique = 0
-									AND sz.total_reserved_MB >= CASE WHEN (@GetAllDatabases = 1 OR @Mode = 0) THEN @ThresholdMB ELSE sz.total_reserved_MB END
-									AND @Filter <> 1 /* 1 = "ignore unused */
-							ORDER BY i.db_schema_object_indexid
-							OPTION    ( RECOMPILE );
-
-
-			RAISERROR(N'check_id 34: Filtered index definition columns not in index definition', 0,1) WITH NOWAIT;
-                 
-					 INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  34 AS check_id, 
-									i.index_sanity_id,
-									80 AS Priority,
-									N'Abnormal Psychology' AS findings_group,
-									N'Filter Columns Not In Index Definition' AS finding, 
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/IndexFeatures' AS URL,
-									N'The index '
-									+ QUOTENAME(i.index_name)
-									+ N' on ['
-									+ i.db_schema_object_name
-									+ N'] has a filter on ['
-									+ i.filter_definition
-									+ N'] but is missing ['
-									+ LTRIM(i.filter_columns_not_in_index)
-									+ N'] from the index definition.'
-									AS details, 
-									i.index_definition, 
-									i.secret_columns, 
-									i.index_usage_summary,
-									sz.index_size_summary
-							FROM    #IndexSanity i
-							JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
-							WHERE   i.filter_columns_not_in_index IS NOT NULL
-							ORDER BY i.db_schema_object_indexid
-							OPTION    ( RECOMPILE );
-                                
-			 ----------------------------------------
-			--Self Loathing Indexes : Check_id 40-49
-			----------------------------------------
-        
-				RAISERROR(N'check_id 40: Fillfactor in nonclustered 80 percent or less', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-						SELECT  40 AS check_id, 
-								i.index_sanity_id,
-								100 AS Priority,
-								N'Self Loathing Indexes' AS findings_group,
-								N'Low Fill Factor on Nonclustered Index' AS finding, 
-								[database_name] AS [Database Name],
-								N'https://www.brentozar.com/go/SelfLoathing' AS URL,
-								CAST(fill_factor AS NVARCHAR(10)) + N'% fill factor on ' + db_schema_object_indexid + N'. '+
-									CASE WHEN (last_user_update IS NULL OR user_updates < 1)
-									THEN N'No writes have been made.'
-									ELSE
-										N'Last write was ' +  CONVERT(NVARCHAR(16),last_user_update,121) + N' and ' + 
-										CAST(user_updates AS NVARCHAR(25)) + N' updates have been made.'
-									END
-									AS details, 
-								i.index_definition,
-								i.secret_columns,
-								i.index_usage_summary,
-								sz.index_size_summary
-						FROM    #IndexSanity AS i
-						JOIN    #IndexSanitySize AS sz ON i.index_sanity_id = sz.index_sanity_id
-						WHERE    index_id > 1
-						AND    fill_factor BETWEEN 1 AND 80 OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 40: Fillfactor in clustered 80 percent or less', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-						SELECT  40 AS check_id, 
-								i.index_sanity_id,
-								100 AS Priority,
-								N'Self Loathing Indexes' AS findings_group,
-								N'Low Fill Factor on Clustered Index' AS finding, 
-								[database_name] AS [Database Name],
-								N'https://www.brentozar.com/go/SelfLoathing' AS URL,
-								N'Fill factor on ' + db_schema_object_indexid + N' is ' + CAST(fill_factor AS NVARCHAR(10)) + N'%. '+
-									CASE WHEN (last_user_update IS NULL OR user_updates < 1)
-									THEN N'No writes have been made.'
-									ELSE
-										N'Last write was ' +  CONVERT(NVARCHAR(16),last_user_update,121) + N' and ' + 
-										CAST(user_updates AS NVARCHAR(25)) + N' updates have been made.'
-									END
-									AS details, 
-								i.index_definition,
-								i.secret_columns,
-								i.index_usage_summary,
-								sz.index_size_summary
-						FROM    #IndexSanity AS i
-						JOIN #IndexSanitySize AS sz ON i.index_sanity_id = sz.index_sanity_id
-						WHERE    index_id = 1
-						AND fill_factor BETWEEN 1 AND 80 OPTION    ( RECOMPILE );
-
-
-				RAISERROR(N'check_id 43: Heaps with forwarded records', 0,1) WITH NOWAIT;
-				WITH    heaps_cte
-						  AS ( SELECT   [object_id],
-										[database_id],
-										[schema_name],
-										SUM(forwarded_fetch_count) AS forwarded_fetch_count,
-										SUM(leaf_delete_count) AS leaf_delete_count
-							   FROM        #IndexPartitionSanity
-							   GROUP BY    [object_id],
-										   [database_id],
-										   [schema_name]
-							   HAVING    SUM(forwarded_fetch_count) > 0)
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  43 AS check_id, 
-									i.index_sanity_id,
-									100 AS Priority,
-									N'Self Loathing Indexes' AS findings_group,
-									N'Heaps with Forwarded Fetches' AS finding, 
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/SelfLoathing' AS URL,
-									CASE WHEN h.forwarded_fetch_count >= 922337203685477 THEN '>= 922,337,203,685,477'
-										WHEN @DaysUptime < 1 THEN CAST(h.forwarded_fetch_count AS NVARCHAR(256)) + N' forwarded fetches against heap: ' + db_schema_object_indexid
-										ELSE REPLACE(CONVERT(NVARCHAR(256),CAST(CAST(
-										(h.forwarded_fetch_count /*/@DaysUptime */)
-										 AS BIGINT) AS MONEY), 1), '.00', '') 
-										END + N' forwarded fetches per day against heap: '
-									+ db_schema_object_indexid AS details, 
-									i.index_definition, 
-									i.secret_columns,
-									i.index_usage_summary,
-									sz.index_size_summary
-							FROM    #IndexSanity i
-							JOIN heaps_cte h ON i.[object_id] = h.[object_id] 
-								 AND i.[database_id] = h.[database_id]
-								 AND i.[schema_name] = h.[schema_name]
-							JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
-							WHERE    i.index_id = 0 
-							AND h.forwarded_fetch_count / @DaysUptime > 1000
-							AND sz.total_reserved_MB >= CASE WHEN NOT (@GetAllDatabases = 1 OR @Mode = 4) THEN @ThresholdMB ELSE sz.total_reserved_MB END
-					OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 44: Large Heaps with reads or writes.', 0,1) WITH NOWAIT;
-				WITH    heaps_cte
-						  AS ( SELECT   [object_id],
-										[database_id],
-										[schema_name], 
-										SUM(forwarded_fetch_count) AS forwarded_fetch_count,
-										SUM(leaf_delete_count) AS leaf_delete_count
-							   FROM        #IndexPartitionSanity
-							   GROUP BY  [object_id],
-										 [database_id],
-										 [schema_name]
-							   HAVING    SUM(forwarded_fetch_count) > 0
-										OR SUM(leaf_delete_count) > 0)
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  44 AS check_id, 
-									i.index_sanity_id,
-									100 AS Priority,
-									N'Self Loathing Indexes' AS findings_group,
-									N'Large Active Heap' AS finding, 
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/SelfLoathing' AS URL,
-									N'Should this table be a heap? ' + db_schema_object_indexid AS details, 
-									i.index_definition, 
-									'N/A' AS secret_columns,
-									i.index_usage_summary,
-									sz.index_size_summary
-							FROM    #IndexSanity i
-							LEFT JOIN heaps_cte h ON i.[object_id] = h.[object_id] 
-									AND i.[database_id] = h.[database_id]
-									AND i.[schema_name] = h.[schema_name]
-							JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
-							WHERE    i.index_id = 0 
-									AND (i.total_reads > 0 OR i.user_updates > 0)
-									AND sz.total_rows >= 100000
-									AND h.[object_id] IS NULL /*don't duplicate the prior check.*/
-					OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 45: Medium Heaps with reads or writes.', 0,1) WITH NOWAIT;
-				WITH    heaps_cte
-						  AS ( SELECT   [object_id],
-										[database_id],
-										[schema_name], 
-										SUM(forwarded_fetch_count) AS forwarded_fetch_count,
-										SUM(leaf_delete_count) AS leaf_delete_count
-							   FROM        #IndexPartitionSanity
-							   GROUP BY  [object_id],
-										 [database_id],
-										 [schema_name]
-							   HAVING    SUM(forwarded_fetch_count) > 0
-										OR SUM(leaf_delete_count) > 0)
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  45 AS check_id, 
-									i.index_sanity_id,
-									100 AS Priority,
-									N'Self Loathing Indexes' AS findings_group,
-									N'Medium Active heap' AS finding, 
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/SelfLoathing' AS URL,
-									N'Should this table be a heap? ' + db_schema_object_indexid AS details, 
-									i.index_definition, 
-									'N/A' AS secret_columns,
-									i.index_usage_summary,
-									sz.index_size_summary
-							FROM    #IndexSanity i
-							LEFT JOIN heaps_cte h ON i.[object_id] = h.[object_id] 
-									AND i.[database_id] = h.[database_id]
-									AND i.[schema_name] = h.[schema_name]
-							JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
-							WHERE    i.index_id = 0 
-									AND 
-										(i.total_reads > 0 OR i.user_updates > 0)
-									AND sz.total_rows >= 10000 AND sz.total_rows < 100000
-									AND h.[object_id] IS NULL /*don't duplicate the prior check.*/
-					OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 46: Small Heaps with reads or writes.', 0,1) WITH NOWAIT;
-				WITH    heaps_cte
-						  AS ( SELECT   [object_id],
-										[database_id],
-										[schema_name], 
-										SUM(forwarded_fetch_count) AS forwarded_fetch_count,
-										SUM(leaf_delete_count) AS leaf_delete_count
-							   FROM        #IndexPartitionSanity
-							   GROUP BY  [object_id],
-										 [database_id],
-										 [schema_name]
-							   HAVING    SUM(forwarded_fetch_count) > 0
-										OR SUM(leaf_delete_count) > 0)
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  46 AS check_id, 
-									i.index_sanity_id,
-									100 AS Priority,
-									N'Self Loathing Indexes' AS findings_group,
-									N'Small Active heap' AS finding, 
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/SelfLoathing' AS URL,
-									N'Should this table be a heap? ' + db_schema_object_indexid AS details, 
-									i.index_definition, 
-									'N/A' AS secret_columns,
-									i.index_usage_summary,
-									sz.index_size_summary
-							FROM    #IndexSanity i
-							LEFT JOIN heaps_cte h ON i.[object_id] = h.[object_id] 
-									AND i.[database_id] = h.[database_id]
-									AND i.[schema_name] = h.[schema_name]
-							JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
-							WHERE    i.index_id = 0 
-									AND 
-										(i.total_reads > 0 OR i.user_updates > 0)
-									AND sz.total_rows < 10000
-									AND h.[object_id] IS NULL /*don't duplicate the prior check.*/
-							OPTION    ( RECOMPILE );
-
-								RAISERROR(N'check_id 47: Heap with a Nonclustered Primary Key', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  47 AS check_id, 
-									i.index_sanity_id,
-									100 AS Priority,
-									N'Self Loathing Indexes' AS findings_group,
-									N'Heap with a Nonclustered Primary Key' AS finding, 
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/SelfLoathing' AS URL,
-									db_schema_object_indexid + N' is a HEAP with a Nonclustered Primary Key' AS details, 
-									i.index_definition, 
-									i.secret_columns,
-									i.index_usage_summary,
-									sz.index_size_summary
-							FROM    #IndexSanity i
-							JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
-							WHERE    i.index_type = 2 AND i.is_primary_key = 1
-							AND EXISTS 
-								(
-								  SELECT 1/0 
-								  FROM #IndexSanity AS isa
-								  WHERE i.database_id = isa.database_id
-								  AND   i.object_id = isa.object_id
-								  AND   isa.index_id = 0
-								)
-							OPTION    ( RECOMPILE );
-
-					RAISERROR(N'check_id 48: Nonclustered indexes with a bad read to write ratio', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  48 AS check_id, 
-									i.index_sanity_id,
-									100 AS Priority,
-									N'Index Hoarder' AS findings_group,
-									N'NC index with High Writes:Reads' AS finding, 
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/IndexHoarder' AS URL,
-									N'Reads: '
-									+ REPLACE(CONVERT(NVARCHAR(30), CAST((i.total_reads) AS MONEY), 1), N'.00', N'') 
-									+ N' Writes: ' 
-									+ REPLACE(CONVERT(NVARCHAR(30), CAST((i.user_updates) AS MONEY), 1), N'.00', N'')
-									+ N' on: '
-									+ i.db_schema_object_indexid AS details, 
-									i.index_definition, 
-									i.secret_columns, 
-									i.index_usage_summary,
-									sz.index_size_summary
-							FROM    #IndexSanity i
-							JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
-							WHERE    i.total_reads > 0 /*Not totally unused*/
-									AND i.user_updates >= 10000 /*Decent write activity*/
-									AND i.total_reads < 10000
-									AND ((i.total_reads * 10) < i.user_updates) /*10x more writes than reads*/
-									AND i.index_id NOT IN (0,1) /*NCs only*/
-									AND i.is_unique = 0 
-									AND sz.total_reserved_MB >= CASE WHEN (@GetAllDatabases = 1 OR @Mode = 0) THEN @ThresholdMB ELSE sz.total_reserved_MB END
-							ORDER BY i.db_schema_object_indexid
-							OPTION    ( RECOMPILE );
-
-			----------------------------------------
-			--Indexaphobia
-			--Missing indexes with value >= 5 million: : Check_id 50-59
-			----------------------------------------
-				RAISERROR(N'check_id 50: Indexaphobia.', 0,1) WITH NOWAIT;
-				WITH    index_size_cte
-						  AS ( SELECT   i.database_id,
-										i.schema_name,
-										i.[object_id], 
-										MAX(i.index_sanity_id) AS index_sanity_id,
-										ISNULL(NULLIF(MAX(DATEDIFF(DAY, i.create_date, SYSDATETIME())), 0), 1) AS create_days,
-									ISNULL (
-										CAST(SUM(CASE WHEN index_id NOT IN (0,1) THEN 1 ELSE 0 END)
-											 AS NVARCHAR(30))+ N' NC indexes exist (' + 
-										CASE WHEN SUM(CASE WHEN index_id NOT IN (0,1) THEN sz.total_reserved_MB ELSE 0 END) > 1024
-											THEN CAST(CAST(SUM(CASE WHEN index_id NOT IN (0,1) THEN sz.total_reserved_MB ELSE 0 END )/1024. 
-
-												AS NUMERIC(29,1)) AS NVARCHAR(30)) + N'GB); ' 
-											ELSE CAST(SUM(CASE WHEN index_id NOT IN (0,1) THEN sz.total_reserved_MB ELSE 0 END) 
-												AS NVARCHAR(30)) + N'MB); '
-										END + 
-											CASE WHEN MAX(sz.[total_rows]) >= 922337203685477 THEN '>= 922,337,203,685,477'
-											ELSE REPLACE(CONVERT(NVARCHAR(30),CAST(MAX(sz.[total_rows]) AS MONEY), 1), '.00', '') 
-											END +
-										+ N' Estimated Rows;' 
-									,N'') AS index_size_summary
-								FROM    #IndexSanity AS i
-								LEFT    JOIN #IndexSanitySize AS sz ON i.index_sanity_id = sz.index_sanity_id  AND i.database_id = sz.database_id
-								WHERE i.is_hypothetical = 0
-									  AND i.is_disabled = 0
-							   GROUP BY    i.database_id, i.schema_name, i.[object_id])
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   index_usage_summary, index_size_summary, create_tsql, more_info, sample_query_plan )
-                        
-							SELECT check_id, t.index_sanity_id, t.check_id, t.findings_group, t.finding, t.[Database Name], t.URL, t.details, t.[definition],
-									index_estimated_impact, t.index_size_summary, create_tsql, more_info, sample_query_plan
-							FROM
-							(
-								SELECT  ROW_NUMBER() OVER (ORDER BY magic_benefit_number DESC) AS rownum,
-									50 AS check_id, 
-									sz.index_sanity_id,
-									40 AS Priority,
-									N'Indexaphobia' AS findings_group,
-									N'High Value Missing Index' AS finding, 
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/Indexaphobia' AS URL,
-									mi.[statement] + 
-									N' Est. benefit per day: ' + 
-										CASE WHEN magic_benefit_number >= 922337203685477 THEN '>= 922,337,203,685,477'
-										ELSE REPLACE(CONVERT(NVARCHAR(256),CAST(CAST(
-										(magic_benefit_number/@DaysUptime)
-										 AS BIGINT) AS MONEY), 1), '.00', '') 
-										END AS details,
-									missing_index_details AS [definition],
-									index_estimated_impact,
-									sz.index_size_summary,
-									mi.create_tsql,
-									mi.more_info,
-									magic_benefit_number,
-									mi.is_low,
-									mi.sample_query_plan
-							FROM    #MissingIndexes mi
-									LEFT JOIN index_size_cte sz ON mi.[object_id] = sz.object_id 
-											  AND mi.database_id = sz.database_id
-											  AND mi.schema_name = sz.schema_name
-											/* Minimum benefit threshold = 100k/day of uptime OR since table creation date, whichever is lower*/
-							WHERE @ShowAllMissingIndexRequests=1
-							OR ( @Mode = 4 AND (magic_benefit_number / CASE WHEN sz.create_days < @DaysUptime THEN sz.create_days ELSE @DaysUptime END) >= 100000 ) 
-							OR (magic_benefit_number / CASE WHEN sz.create_days < @DaysUptime THEN sz.create_days ELSE @DaysUptime END) >= 100000
-							) AS t
-							WHERE t.rownum <= CASE WHEN (@Mode <> 4) THEN 20 ELSE t.rownum END
-							ORDER BY magic_benefit_number DESC
-							OPTION    ( RECOMPILE );
-
-
-
-				RAISERROR(N'check_id 68: Identity columns within 30 percent of the end of range', 0,1) WITH NOWAIT;
-				-- Allowed Ranges: 
-					--int -2,147,483,648 to 2,147,483,647
-					--smallint -32,768 to 32,768
-					--tinyint 0 to 255
-
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  68 AS check_id, 
-									i.index_sanity_id, 
-									80 AS Priority,
-									N'Abnormal Psychology' AS findings_group,
-									N'Identity Column Within ' +                                     
-										CAST (calc1.percent_remaining AS NVARCHAR(256))
-										+ N' Percent End of Range' AS finding,
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
-									i.db_schema_object_name + N'.' +  QUOTENAME(ic.column_name)
-										+ N' is an identity with type ' + ic.system_type_name 
-										+ N', last value of ' 
-											+ ISNULL((CONVERT(NVARCHAR(256),CAST(ic.last_value AS DECIMAL(38,0)), 1)),N'NULL')
-										+ N', seed of '
-											+ ISNULL((CONVERT(NVARCHAR(256),CAST(ic.seed_value AS DECIMAL(38,0)), 1)),N'NULL')
-										+ N', increment of ' + CAST(ic.increment_value AS NVARCHAR(256)) 
-										+ N', and range of ' +
-											CASE ic.system_type_name WHEN 'int' THEN N'+/- 2,147,483,647'
-												WHEN 'smallint' THEN N'+/- 32,768'
-												WHEN 'tinyint' THEN N'0 to 255'
-												ELSE 'unknown'
-											END
-											AS details,
-									i.index_definition,
-									secret_columns, 
-									ISNULL(i.index_usage_summary,''),
-									ISNULL(ip.index_size_summary,'')
-							FROM    #IndexSanity i
-							JOIN    #IndexColumns ic ON
-								i.object_id=ic.object_id
-								AND i.database_id = ic.database_id
-								AND i.schema_name = ic.schema_name
-								AND i.index_id IN (0,1) /* heaps and cx only */
-								AND ic.is_identity=1
-								AND ic.system_type_name IN ('tinyint', 'smallint', 'int')
-							JOIN    #IndexSanitySize ip ON i.index_sanity_id = ip.index_sanity_id
-							CROSS APPLY (
-								SELECT CAST(CASE WHEN ic.increment_value >= 0
-										THEN
-											CASE ic.system_type_name 
-												WHEN 'int' THEN (2147483647 - (ISNULL(ic.last_value,ic.seed_value) + ic.increment_value)) / 2147483647.*100
-												WHEN 'smallint' THEN (32768 - (ISNULL(ic.last_value,ic.seed_value) + ic.increment_value)) / 32768.*100
-												WHEN 'tinyint' THEN ( 255 - (ISNULL(ic.last_value,ic.seed_value) + ic.increment_value)) / 255.*100
-												ELSE 999
-											END
-									ELSE --ic.increment_value is negative
-											CASE ic.system_type_name 
-												WHEN 'int' THEN ABS(-2147483647 - (ISNULL(ic.last_value,ic.seed_value) + ic.increment_value)) / 2147483647.*100
-												WHEN 'smallint' THEN ABS(-32768 - (ISNULL(ic.last_value,ic.seed_value) + ic.increment_value)) / 32768.*100
-												WHEN 'tinyint' THEN ABS( 0 - (ISNULL(ic.last_value,ic.seed_value) + ic.increment_value)) / 255.*100
-												ELSE -1
-											END 
-									END AS NUMERIC(5,1)) AS percent_remaining
-									) AS calc1
-							WHERE    i.index_id IN (1,0)
-								AND calc1.percent_remaining <= 30
-							OPTION (RECOMPILE);
-
-
-			RAISERROR(N'check_id 72: Columnstore indexes with Trace Flag 834', 0,1) WITH NOWAIT;
-				IF EXISTS (SELECT * FROM #IndexSanity WHERE index_type IN (5,6))
-				AND EXISTS (SELECT * FROM #TraceStatus WHERE TraceFlag = 834 AND status = 1)
-				BEGIN
-				INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												secret_columns, index_usage_summary, index_size_summary )
-					SELECT  72 AS check_id, 
-							i.index_sanity_id,
-							80 AS Priority,
-							N'Abnormal Psychology' AS findings_group,
-							'Columnstore Indexes with Trace Flag 834' AS finding, 
-							[database_name] AS [Database Name],
-							N'https://support.microsoft.com/en-us/kb/3210239' AS URL,
-							i.db_schema_object_indexid AS details, 
-							i.index_definition,
-							i.secret_columns,
-							i.index_usage_summary,
-							ISNULL(sz.index_size_summary,'') AS index_size_summary
-					FROM    #IndexSanity AS i
-					JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
-					WHERE i.index_type IN (5,6)
-					OPTION    ( RECOMPILE );
-				END;
-
-			----------------------------------------
-			--Statistics Info: Check_id 90-99
-			----------------------------------------
-
-			RAISERROR(N'check_id 90: Outdated statistics', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-			SELECT  90 AS check_id, 
-					90 AS Priority,
-					'Functioning Statistaholics' AS findings_group,
-					'Statistics Not Updated Recently',
-					s.database_name,
-					'https://www.brentozar.com/go/stats' AS URL,
-					'Statistics on this table were last updated ' + 
-						CASE WHEN s.last_statistics_update IS NULL THEN N' NEVER '
-						ELSE CONVERT(NVARCHAR(20), s.last_statistics_update) + 
-							' have had ' + CONVERT(NVARCHAR(100), s.modification_counter) +
-							' modifications in that time, which is ' +
-							CONVERT(NVARCHAR(100), s.percent_modifications) + 
-							'% of the table.'
-						END AS details,
-					QUOTENAME(database_name) + '.' + QUOTENAME(s.schema_name) + '.' + QUOTENAME(s.table_name) + '.' + QUOTENAME(s.index_name) + '.' + QUOTENAME(s.statistics_name) + '.' + QUOTENAME(s.column_names) AS index_definition,
-					'N/A' AS secret_columns,
-					'N/A' AS index_usage_summary,
-					'N/A' AS index_size_summary
-			FROM #Statistics AS s
-			WHERE s.last_statistics_update <= CONVERT(DATETIME, GETDATE() - 30) 
-			AND s.percent_modifications >= 10. 
-			AND s.rows >= 10000
-			OPTION    ( RECOMPILE );
-
-			RAISERROR(N'check_id 91: Statistics with a low sample rate', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-			SELECT  91 AS check_id, 
-					90 AS Priority,
-					'Functioning Statistaholics' AS findings_group,
-					'Low Sampling Rates',
-					s.database_name,
-					'https://www.brentozar.com/go/stats' AS URL,
-					'Only ' + CONVERT(NVARCHAR(100), s.percent_sampled) + '% of the rows were sampled during the last statistics update. This may lead to poor cardinality estimates.' AS details,
-					QUOTENAME(database_name) + '.' + QUOTENAME(s.schema_name) + '.' + QUOTENAME(s.table_name) + '.' + QUOTENAME(s.index_name) + '.' + QUOTENAME(s.statistics_name) + '.' + QUOTENAME(s.column_names) AS index_definition,
-					'N/A' AS secret_columns,
-					'N/A' AS index_usage_summary,
-					'N/A' AS index_size_summary
-			FROM #Statistics AS s
-			WHERE (s.rows BETWEEN 10000 AND 1000000 AND s.percent_sampled < 10)
-			  OR (s.rows > 1000000 AND s.percent_sampled < 1)
-			OPTION    ( RECOMPILE );
-
-			RAISERROR(N'check_id 92: Statistics with NO RECOMPUTE', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-			SELECT  92 AS check_id, 
-					90 AS Priority,
-					'Functioning Statistaholics' AS findings_group,
-					'Statistics With NO RECOMPUTE',
-					s.database_name,
-					'https://www.brentozar.com/go/stats' AS URL,
-					'The statistic ' + QUOTENAME(s.statistics_name) +  ' is set to not recompute. This can be helpful if data is really skewed, but harmful if you expect automatic statistics updates.' AS details,
-					QUOTENAME(database_name) + '.' + QUOTENAME(s.schema_name) + '.' + QUOTENAME(s.table_name) + '.' + QUOTENAME(s.index_name) + '.' + QUOTENAME(s.statistics_name) + '.' + QUOTENAME(s.column_names) AS index_definition,
-					'N/A' AS secret_columns,
-					'N/A' AS index_usage_summary,
-					'N/A' AS index_size_summary
-			FROM #Statistics AS s
-			WHERE s.no_recompute = 1
-			OPTION    ( RECOMPILE );
-
-
-			 RAISERROR(N'check_id 94: Check Constraints That Reference Functions', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-			SELECT  94 AS check_id, 
-					100 AS Priority,
-					'Serial Forcer' AS findings_group,
-					'Check Constraint with Scalar UDF' AS finding,
-					cc.database_name,
-					'https://www.brentozar.com/go/computedscalar' AS URL,
-					'The check constraint ' + QUOTENAME(cc.constraint_name) + ' on ' + QUOTENAME(cc.schema_name) + '.' + QUOTENAME(cc.table_name) + ' is based on ' + cc.definition 
-					+ '. That indicates it may reference a scalar function, or a CLR function with data access, which can cause all queries and maintenance to run serially.' AS details,
-					cc.column_definition,
-					'N/A' AS secret_columns,
-					'N/A' AS index_usage_summary,
-					'N/A' AS index_size_summary
-			FROM #CheckConstraints AS cc
-			WHERE cc.is_function = 1
-			OPTION    ( RECOMPILE );
-
-			RAISERROR(N'check_id 99: Computed Columns That Reference Functions', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-			SELECT  99 AS check_id, 
-					100 AS Priority,
-					'Serial Forcer' AS findings_group,
-					'Computed Column with Scalar UDF' AS finding,
-					cc.database_name,
-					'https://www.brentozar.com/go/serialudf' AS URL,
-					'The computed column ' + QUOTENAME(cc.column_name) + ' on ' + QUOTENAME(cc.schema_name) + '.' + QUOTENAME(cc.table_name) + ' is based on ' + cc.definition 
-					+ '. That indicates it may reference a scalar function, or a CLR function with data access, which can cause all queries and maintenance to run serially.' AS details,
-					cc.column_definition,
-					'N/A' AS secret_columns,
-					'N/A' AS index_usage_summary,
-					'N/A' AS index_size_summary
-			FROM #ComputedColumns AS cc
-			WHERE cc.is_function = 1
-			OPTION    ( RECOMPILE );
-
-
-
-		END /* IF @Mode IN (0, 4) DIAGNOSE priorities 1-100 */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-		IF @Mode = 4 /* DIAGNOSE*/
-		BEGIN;
-			RAISERROR(N'@Mode=4, running rules for priorities 101+.', 0,1) WITH NOWAIT;
-
-				RAISERROR(N'check_id 21: More Than 5 Percent NC Indexes Are Unused', 0,1) WITH NOWAIT;
-				DECLARE @percent_NC_indexes_unused NUMERIC(29,1);
-				DECLARE @NC_indexes_unused_reserved_MB NUMERIC(29,1);
-
-				SELECT  @percent_NC_indexes_unused = ( 100.00 * SUM(CASE 
-																		WHEN total_reads = 0 
-																		THEN 1
-																		ELSE 0
-																		END) ) / COUNT(*),
-						@NC_indexes_unused_reserved_MB = SUM(CASE 
-																	WHEN total_reads = 0 
-																	THEN sz.total_reserved_MB
-																	ELSE 0
-																END) 
-				FROM    #IndexSanity i
-				JOIN    #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
-				WHERE    index_id NOT IN ( 0, 1 ) 
-						AND i.is_unique = 0
-						/*Skipping tables created in the last week, or modified in past 2 days*/
-						AND	i.create_date >= DATEADD(dd,-7,GETDATE()) 
-						AND i.modify_date > DATEADD(dd,-2,GETDATE()) 
-				OPTION    ( RECOMPILE );
-				IF @percent_NC_indexes_unused >= 5 
-				INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												secret_columns, index_usage_summary, index_size_summary )
-							SELECT  21 AS check_id, 
-									MAX(i.index_sanity_id) AS index_sanity_id, 
-									150 AS Priority,
-									N'Index Hoarder' AS findings_group,
-									N'More Than 5 Percent NC Indexes Are Unused' AS finding,
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/IndexHoarder' AS URL,
-									CAST (@percent_NC_indexes_unused AS NVARCHAR(30)) + N' percent NC indexes (' + CAST(COUNT(*) AS NVARCHAR(10)) + N') unused. ' +
-									N'These take up ' + CAST (@NC_indexes_unused_reserved_MB AS NVARCHAR(30)) + N'MB of space.' AS details,
-									i.database_name + ' (' + CAST (COUNT(*) AS NVARCHAR(30)) + N' indexes)' AS index_definition,
-									'' AS secret_columns, 
-									CAST(SUM(total_reads) AS NVARCHAR(256)) + N' reads (ALL); '
-										+ CAST(SUM([user_updates]) AS NVARCHAR(256)) + N' writes (ALL)' AS index_usage_summary,
-                                
-									REPLACE(CONVERT(NVARCHAR(30),CAST(MAX([total_rows]) AS MONEY), 1), '.00', '') + N' rows (MAX)'
-										+ CASE WHEN SUM(total_reserved_MB) > 1024 THEN 
-											N'; ' + CAST(CAST(SUM(total_reserved_MB)/1024. AS NUMERIC(29,1)) AS NVARCHAR(30)) + 'GB (ALL)'
-										WHEN SUM(total_reserved_MB) > 0 THEN
-											N'; ' + CAST(CAST(SUM(total_reserved_MB) AS NUMERIC(29,1)) AS NVARCHAR(30)) + 'MB (ALL)'
-										ELSE ''
-										END AS index_size_summary
-							FROM    #IndexSanity i
-							JOIN    #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
-							WHERE    index_id NOT IN ( 0, 1 )
-									AND i.is_unique = 0
-									AND total_reads = 0
-									/*Skipping tables created in the last week, or modified in past 2 days*/
-									AND	i.create_date >= DATEADD(dd,-7,GETDATE()) 
-									AND i.modify_date > DATEADD(dd,-2,GETDATE())
-							GROUP BY i.database_name 
-					OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 23: Indexes with 7 or more columns. (Borderline)', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-						SELECT  23 AS check_id, 
-								i.index_sanity_id,
-								150 AS Priority, 
-								N'Index Hoarder' AS findings_group,
-								N'Borderline: Wide Indexes (7 or More Columns)' AS finding, 
-								[database_name] AS [Database Name],
-								N'https://www.brentozar.com/go/IndexHoarder' AS URL,
-								CAST(count_key_columns + count_included_columns AS NVARCHAR(10)) + ' columns on '
-								+ i.db_schema_object_indexid AS details, i.index_definition, 
-								i.secret_columns, 
-								i.index_usage_summary,
-								sz.index_size_summary
-						FROM    #IndexSanity AS i
-						JOIN    #IndexSanitySize AS sz ON i.index_sanity_id = sz.index_sanity_id
-						WHERE    ( count_key_columns + count_included_columns ) >= 7
+        ---------------------------------------- 
+        --Index Hoarder: Check_id 20-29
+        ----------------------------------------
+            RAISERROR(N'check_id 20: >= 10 NC indexes on any given table. Yes, 10 is an arbitrary number.', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  20 AS check_id, 
+                                MAX(i.index_sanity_id) AS index_sanity_id, 
+                                10 AS Priority,
+                                'Index Hoarder' AS findings_group,
+                                'Many NC Indexes on a Single Table' AS finding,
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/IndexHoarder' AS URL,
+                                CAST (COUNT(*) AS NVARCHAR(30)) + ' NC indexes on ' + i.db_schema_object_name AS details,
+                                i.db_schema_object_name + ' (' + CAST (COUNT(*) AS NVARCHAR(30)) + ' indexes)' AS index_definition,
+                                '' AS secret_columns,
+                                REPLACE(CONVERT(NVARCHAR(30),CAST(SUM(total_reads) AS MONEY), 1), N'.00', N'') + N' reads (ALL); '
+                                    + REPLACE(CONVERT(NVARCHAR(30),CAST(SUM(user_updates) AS MONEY), 1), N'.00', N'') + N' writes (ALL); ',
+                                REPLACE(CONVERT(NVARCHAR(30),CAST(MAX(total_rows) AS MONEY), 1), N'.00', N'') + N' rows (MAX)'
+                                    + CASE WHEN SUM(total_reserved_MB) > 1024 THEN 
+                                        N'; ' + CAST(CAST(SUM(total_reserved_MB)/1024. AS NUMERIC(29,1)) AS NVARCHAR(30)) + 'GB (ALL)'
+                                    WHEN SUM(total_reserved_MB) > 0 THEN
+                                        N'; ' + CAST(CAST(SUM(total_reserved_MB) AS NUMERIC(29,1)) AS NVARCHAR(30)) + 'MB (ALL)'
+                                    ELSE ''
+                                    END AS index_size_summary
+                        FROM    #IndexSanity i
+                        JOIN #IndexSanitySize ip ON i.index_sanity_id = ip.index_sanity_id
+                        WHERE    index_id NOT IN ( 0, 1 )
+                        GROUP BY db_schema_object_name, [i].[database_name]
+                        HAVING    COUNT(*) >= 10
+                        ORDER BY i.db_schema_object_name DESC  
 						OPTION    ( RECOMPILE );
 
-				RAISERROR(N'check_id 24: Wide clustered indexes (> 3 columns or > 16 bytes).', 0,1) WITH NOWAIT;
-					WITH count_columns AS (
-								SELECT database_id, [object_id],
-									SUM(CASE max_length WHEN -1 THEN 0 ELSE max_length END) AS sum_max_length
-								FROM #IndexColumns ic
-								WHERE index_id IN (1,0) /*Heap or clustered only*/
-								AND key_ordinal > 0
-								GROUP BY database_id, object_id
-								)
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  24 AS check_id, 
-									i.index_sanity_id, 
-									150 AS Priority,
-									N'Index Hoarder' AS findings_group,
-									N'Wide Clustered Index (> 3 columns OR > 16 bytes)' AS finding,
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/IndexHoarder' AS URL,
-									CAST (i.count_key_columns AS NVARCHAR(10)) + N' columns with potential size of '
-										+ CAST(cc.sum_max_length AS NVARCHAR(10))
-										+ N' bytes in clustered index:' + i.db_schema_object_name 
-										+ N'. ' + 
-											(SELECT CAST(COUNT(*) AS NVARCHAR(23)) 
-											 FROM #IndexSanity i2 
-											 WHERE i2.[object_id]=i.[object_id] 
-											 AND i2.database_id = i.database_id 
-											 AND i2.index_id <> 1
-											 AND i2.is_disabled=0 
-											 AND i2.is_hypothetical=0)
-											+ N' NC indexes on the table.'
-										AS details,
-									i.index_definition,
-									secret_columns, 
-									i.index_usage_summary,
-									ip.index_size_summary
-							FROM    #IndexSanity i
-							JOIN    #IndexSanitySize ip ON i.index_sanity_id = ip.index_sanity_id
-							JOIN    count_columns AS cc ON i.[object_id]=cc.[object_id]
-													   AND i.database_id = cc.database_id
-							WHERE    index_id = 1 /* clustered only */
-									AND 
-										(count_key_columns > 3 /*More than three key columns.*/
-										OR cc.sum_max_length > 16 /*More than 16 bytes in key */)
-										AND i.is_CX_columnstore = 0
-							ORDER BY i.db_schema_object_name DESC OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 25: Addicted to nullable columns.', 0,1) WITH NOWAIT;
-					WITH count_columns AS (
-								SELECT [object_id],
-									   [database_id],
-									   [schema_name],
-									SUM(CASE is_nullable WHEN 1 THEN 0 ELSE 1 END) AS non_nullable_columns,
-									COUNT(*) AS total_columns
-								FROM #IndexColumns ic
-								WHERE index_id IN (1,0) /*Heap or clustered only*/
-								GROUP BY [object_id],
-										 [database_id],
-										 [schema_name]
-								)
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  25 AS check_id, 
-									i.index_sanity_id, 
-									200 AS Priority,
-									N'Index Hoarder' AS findings_group,
-									N'Addicted to Nulls' AS finding,
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/IndexHoarder' AS URL,
-									i.db_schema_object_name 
-										+ N' allows null in ' + CAST((total_columns-non_nullable_columns) AS NVARCHAR(10))
-										+ N' of ' + CAST(total_columns AS NVARCHAR(10))
-										+ N' columns.' AS details,
-									i.index_definition,
-									secret_columns, 
-									ISNULL(i.index_usage_summary,''),
-									ISNULL(ip.index_size_summary,'')
-							FROM    #IndexSanity i
-							JOIN    #IndexSanitySize ip ON i.index_sanity_id = ip.index_sanity_id
-							JOIN    count_columns AS cc ON i.[object_id]=cc.[object_id]
-									AND cc.database_id = ip.database_id
-									AND cc.[schema_name] = ip.[schema_name]
-							WHERE    i.index_id IN (1,0)
-								AND cc.non_nullable_columns < 2
-								AND cc.total_columns > 3
-							ORDER BY i.db_schema_object_name DESC OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 26: Wide tables (35+ cols or > 2000 non-LOB bytes).', 0,1) WITH NOWAIT;
-					WITH count_columns AS (
-								SELECT [object_id],
-									   [database_id],
-									   [schema_name],
-									SUM(CASE max_length WHEN -1 THEN 1 ELSE 0 END) AS count_lob_columns,
-									SUM(CASE max_length WHEN -1 THEN 0 ELSE max_length END) AS sum_max_length,
-									COUNT(*) AS total_columns
-								FROM #IndexColumns ic
-								WHERE index_id IN (1,0) /*Heap or clustered only*/
-								GROUP BY [object_id],
-										 [database_id],
-										 [schema_name]
-								)
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  26 AS check_id, 
-									i.index_sanity_id, 
-									150 AS Priority,
-									N'Index Hoarder' AS findings_group,
-									N'Wide Tables: 35+ cols or > 2000 non-LOB bytes' AS finding,
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/IndexHoarder' AS URL,
-									i.db_schema_object_name 
-										+ N' has ' + CAST((total_columns) AS NVARCHAR(10))
-										+ N' total columns with a max possible width of ' + CAST(sum_max_length AS NVARCHAR(10))
-										+ N' bytes.' +
-										CASE WHEN count_lob_columns > 0 THEN CAST((count_lob_columns) AS NVARCHAR(10))
-											+ ' columns are LOB types.' ELSE ''
-										END
-											AS details,
-									i.index_definition,
-									secret_columns, 
-									ISNULL(i.index_usage_summary,''),
-									ISNULL(ip.index_size_summary,'')
-							FROM    #IndexSanity i
-							JOIN    #IndexSanitySize ip ON i.index_sanity_id = ip.index_sanity_id
-							JOIN    count_columns AS cc ON i.[object_id]=cc.[object_id]
-									AND cc.database_id = i.database_id
-									AND cc.[schema_name] = i.[schema_name]
-							WHERE    i.index_id IN (1,0)
-								AND 
-								(cc.total_columns >= 35 OR
-								cc.sum_max_length >= 2000)
-							ORDER BY i.db_schema_object_name DESC OPTION    ( RECOMPILE );
-                    
-				RAISERROR(N'check_id 27: Addicted to strings.', 0,1) WITH NOWAIT;
-					WITH count_columns AS (
-								SELECT [object_id],
-									   [database_id],
-									   [schema_name],
-									SUM(CASE WHEN system_type_name IN ('varchar','nvarchar','char') OR max_length=-1 THEN 1 ELSE 0 END) AS string_or_LOB_columns,
-									COUNT(*) AS total_columns
-								FROM #IndexColumns ic
-								WHERE index_id IN (1,0) /*Heap or clustered only*/
-								GROUP BY [object_id],
-										 [database_id],
-										 [schema_name]
-								)
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  27 AS check_id, 
-									i.index_sanity_id, 
-									200 AS Priority,
-									N'Index Hoarder' AS findings_group,
-									N'Addicted to strings' AS finding,
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/IndexHoarder' AS URL,
-									i.db_schema_object_name 
-										+ N' uses string or LOB types for ' + CAST((string_or_LOB_columns) AS NVARCHAR(10))
-										+ N' of ' + CAST(total_columns AS NVARCHAR(10))
-										+ N' columns. Check if data types are valid.' AS details,
-									i.index_definition,
-									secret_columns, 
-									ISNULL(i.index_usage_summary,''),
-									ISNULL(ip.index_size_summary,'')
-							FROM    #IndexSanity i
-							JOIN    #IndexSanitySize ip ON i.index_sanity_id = ip.index_sanity_id
-							JOIN    count_columns AS cc ON i.[object_id]=cc.[object_id]
-									AND cc.database_id = i.database_id
-									AND cc.[schema_name] = i.[schema_name]
-							CROSS APPLY (SELECT cc.total_columns - string_or_LOB_columns AS non_string_or_lob_columns) AS calc1
-							WHERE    i.index_id IN (1,0)
-								AND calc1.non_string_or_lob_columns <= 1
-								AND cc.total_columns > 3
-							ORDER BY i.db_schema_object_name DESC OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 28: Non-unique clustered index.', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  28 AS check_id, 
-									i.index_sanity_id, 
-									150 AS Priority,
-									N'Index Hoarder' AS findings_group,
-									N'Non-Unique Clustered Index' AS finding,
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/IndexHoarder' AS URL,
-									N'Uniquifiers will be required! Clustered index: ' + i.db_schema_object_name 
-										+ N' and all NC indexes. ' + 
-											(SELECT CAST(COUNT(*) AS NVARCHAR(23)) 
-											 FROM #IndexSanity i2 
-											 WHERE i2.[object_id]=i.[object_id] 
-											 AND i2.database_id = i.database_id 
-											 AND i2.index_id <> 1
-											 AND i2.is_disabled=0 
-											 AND i2.is_hypothetical=0)
-											+ N' NC indexes on the table.'
-										AS details,
-									i.index_definition,
-									secret_columns, 
-									i.index_usage_summary,
-									ip.index_size_summary
-							FROM    #IndexSanity i
-							JOIN    #IndexSanitySize ip ON i.index_sanity_id = ip.index_sanity_id
-							WHERE    index_id = 1 /* clustered only */
-									AND is_unique=0 /* not unique */
-									AND is_CX_columnstore=0 /* not a clustered columnstore-- no unique option on those */
-							ORDER BY i.db_schema_object_name DESC OPTION    ( RECOMPILE );
-
-			RAISERROR(N'check_id 29: NC indexes with 0 reads. (Borderline) and < 10,000 writes', 0,1) WITH NOWAIT;
-			INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-											secret_columns, index_usage_summary, index_size_summary )
-					SELECT  29 AS check_id, 
-							i.index_sanity_id,
-							150 AS Priority,
-							N'Index Hoarder' AS findings_group,
-							N'Unused NC index with Low Writes' AS finding, 
-							[database_name] AS [Database Name],
-							N'https://www.brentozar.com/go/IndexHoarder' AS URL,
-							N'0 reads: ' + i.db_schema_object_indexid AS details, 
-							i.index_definition, 
-							i.secret_columns, 
-							i.index_usage_summary,
-							sz.index_size_summary
-					FROM    #IndexSanity AS i
-					JOIN    #IndexSanitySize AS sz ON i.index_sanity_id = sz.index_sanity_id
-					WHERE    i.total_reads=0
-							AND i.user_updates < 10000
-							AND i.index_id NOT IN (0,1) /*NCs only*/
-							AND i.is_unique = 0
-							AND sz.total_reserved_MB >= CASE WHEN (@GetAllDatabases = 1 OR @Mode = 0) THEN @ThresholdMB ELSE sz.total_reserved_MB END
-							/*Skipping tables created in the last week, or modified in past 2 days*/
-							AND	i.create_date >= DATEADD(dd,-7,GETDATE()) 
-							AND i.modify_date > DATEADD(dd,-2,GETDATE())
-					ORDER BY i.db_schema_object_indexid
-					OPTION    ( RECOMPILE );
-
-
-			----------------------------------------
-			--Feature-Phobic Indexes: Check_id 30-39
-			---------------------------------------- 
-				RAISERROR(N'check_id 30: No indexes with includes', 0,1) WITH NOWAIT;
-				/* This does not work the way you'd expect with @GetAllDatabases = 1. For details:
-				   https://github.com/BrentOzarULTD/SQL-Server-First-Responder-Kit/issues/825
-				*/
-
-				SELECT  database_name,
-						SUM(CASE WHEN count_included_columns > 0 THEN 1 ELSE 0 END) AS number_indexes_with_includes,
-						100.* SUM(CASE WHEN count_included_columns > 0 THEN 1 ELSE 0 END) / ( 1.0 * COUNT(*) ) AS percent_indexes_with_includes
-				INTO #index_includes
-				FROM    #IndexSanity
-				WHERE is_hypothetical = 0
-				AND is_disabled = 0
-				AND NOT (@GetAllDatabases = 1 OR @Mode = 0)
-				GROUP BY database_name;
-
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  30 AS check_id, 
-									NULL AS index_sanity_id, 
-									250 AS Priority,
-									N'Feature-Phobic Indexes' AS findings_group,
-									database_name AS [Database Name],
-									N'No Indexes Use Includes' AS finding, 'https://www.brentozar.com/go/IndexFeatures' AS URL,
-									N'No Indexes Use Includes' AS details,
-									database_name + N' (Entire database)' AS index_definition, 
-									N'' AS secret_columns, 
-									N'N/A' AS index_usage_summary, 
-									N'N/A' AS index_size_summary 
-							FROM #index_includes
-							WHERE number_indexes_with_includes = 0
-							OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 31: < 3 percent of indexes have includes', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-						SELECT  31 AS check_id,
-								NULL AS index_sanity_id, 
-								250 AS Priority,
-								N'Feature-Phobic Indexes' AS findings_group,
-								N'Few Indexes Use Includes' AS findings,
-								database_name AS [Database Name],
-								N'https://www.brentozar.com/go/IndexFeatures' AS URL,
-								N'Only ' + CAST(percent_indexes_with_includes AS NVARCHAR(20)) + '% of indexes have includes' AS details, 
-								N'Entire database' AS index_definition, 
-								N'' AS secret_columns,
-								N'N/A' AS index_usage_summary, 
-								N'N/A' AS index_size_summary
-						FROM #index_includes
-						WHERE number_indexes_with_includes > 0 AND percent_indexes_with_includes <= 3
-						OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 32: filtered indexes and indexed views', 0,1) WITH NOWAIT;
-
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-						SELECT  DISTINCT
-								32 AS check_id, 
-								NULL AS index_sanity_id,
-								250 AS Priority,
-								N'Feature-Phobic Indexes' AS findings_group,
-								N'No Filtered Indexes or Indexed Views' AS finding, 
-								i.database_name AS [Database Name],
-								N'https://www.brentozar.com/go/IndexFeatures' AS URL,
-								N'These are NOT always needed-- but do you know when you would use them?' AS details,
-								i.database_name + N' (Entire database)' AS index_definition, 
-								N'' AS secret_columns,
-								N'N/A' AS index_usage_summary, 
-								N'N/A' AS index_size_summary 
-						FROM #IndexSanity i
-						WHERE i.database_name NOT IN (                
-								SELECT   database_name
-								FROM     #IndexSanity
-								WHERE    filter_definition <> '' )
-						AND i.database_name NOT IN (
-							   SELECT  database_name
-							   FROM    #IndexSanity
-							   WHERE   is_indexed_view = 1 )
-						OPTION    ( RECOMPILE );
-
-			RAISERROR(N'check_id 33: Potential filtered indexes based on column names.', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-						SELECT  33 AS check_id, 
-								i.index_sanity_id AS index_sanity_id,
-								250 AS Priority,
-								N'Feature-Phobic Indexes' AS findings_group,
-								N'Potential Filtered Index (Based on Column Name)' AS finding, 
-								[database_name] AS [Database Name],
-								N'https://www.brentozar.com/go/IndexFeatures' AS URL,
-								N'A column name in this index suggests it might be a candidate for filtering (is%, %archive%, %active%, %flag%)' AS details,
-								i.index_definition, 
-								i.secret_columns,
-								i.index_usage_summary, 
-								sz.index_size_summary
-						FROM #IndexColumns ic 
-						JOIN #IndexSanity i ON ic.[object_id]=i.[object_id] 
-							AND ic.database_id =i.database_id
-							AND ic.schema_name = i.schema_name
-							AND ic.[index_id]=i.[index_id] 
-							AND i.[index_id] > 1 /* non-clustered index */
-						JOIN    #IndexSanitySize AS sz ON i.index_sanity_id = sz.index_sanity_id
-						WHERE (column_name LIKE 'is%'
-							OR column_name LIKE '%archive%'
-							OR column_name LIKE '%active%'
-							OR column_name LIKE '%flag%')
-						OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 41: Hypothetical indexes ', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-						SELECT  41 AS check_id, 
-								i.index_sanity_id,
-								150 AS Priority,
-								N'Self Loathing Indexes' AS findings_group,
-								N'Hypothetical Index' AS finding,
-								[database_name] AS [Database Name],
-								N'https://www.brentozar.com/go/SelfLoathing' AS URL,
-								N'Hypothetical Index: ' + db_schema_object_indexid AS details, 
-								i.index_definition,
-								i.secret_columns,
-								N'' AS index_usage_summary, 
-								N'' AS index_size_summary
-						FROM    #IndexSanity AS i
-						WHERE    is_hypothetical = 1 
-						OPTION    ( RECOMPILE );
-
-
-				RAISERROR(N'check_id 42: Disabled indexes', 0,1) WITH NOWAIT;
-				--Note: disabled NC indexes will have O rows in #IndexSanitySize!
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-						SELECT  42 AS check_id, 
-								index_sanity_id,
-								150 AS Priority,
-								N'Self Loathing Indexes' AS findings_group,
-								N'Disabled Index' AS finding, 
-								[database_name] AS [Database Name],
-								N'https://www.brentozar.com/go/SelfLoathing' AS URL,
-								N'Disabled Index:' + db_schema_object_indexid AS details, 
-								i.index_definition,
-								i.secret_columns,
-								i.index_usage_summary,
-								'DISABLED' AS index_size_summary
-						FROM    #IndexSanity AS i
-						WHERE    is_disabled = 1
-						OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 49: Heaps with deletes', 0,1) WITH NOWAIT;
-				WITH    heaps_cte
-						  AS ( SELECT   [object_id],
-										[database_id],
-										[schema_name],
-										SUM(leaf_delete_count) AS leaf_delete_count
-							   FROM        #IndexPartitionSanity
-							   GROUP BY    [object_id],
-										   [database_id],
-										   [schema_name]
-							   HAVING    SUM(forwarded_fetch_count) < 1000 * @DaysUptime /* Only alert about indexes with no forwarded fetches - we already alerted about those in check_id 43 */
-										AND SUM(leaf_delete_count) > 0)
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  49 AS check_id, 
-									i.index_sanity_id,
-									200 AS Priority,
-									N'Self Loathing Indexes' AS findings_group,
-									N'Heaps with Deletes' AS finding, 
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/SelfLoathing' AS URL,
-									CAST(h.leaf_delete_count AS NVARCHAR(256)) + N' deletes against heap:'
-									+ db_schema_object_indexid AS details, 
-									i.index_definition, 
-									i.secret_columns,
-									i.index_usage_summary,
-									sz.index_size_summary
-							FROM    #IndexSanity i
-							JOIN heaps_cte h ON i.[object_id] = h.[object_id] 
-								 AND i.[database_id] = h.[database_id]
-								 AND i.[schema_name] = h.[schema_name]
-							JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
-							WHERE    i.index_id = 0 
-							AND sz.total_reserved_MB >= CASE WHEN NOT (@GetAllDatabases = 1 OR @Mode = 4) THEN @ThresholdMB ELSE sz.total_reserved_MB END
-					OPTION    ( RECOMPILE );
-
-			 ----------------------------------------
-			--Abnormal Psychology : Check_id 60-79
-			----------------------------------------
-				RAISERROR(N'check_id 60: XML indexes', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-						SELECT  60 AS check_id, 
-								i.index_sanity_id,
-								150 AS Priority,
-								N'Abnormal Psychology' AS findings_group,
-								N'XML Index' AS finding, 
-								[database_name] AS [Database Name],
-								N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
-								i.db_schema_object_indexid AS details, 
-								i.index_definition,
-								i.secret_columns,
-								N'' AS index_usage_summary,
-								ISNULL(sz.index_size_summary,'') AS index_size_summary
-						FROM    #IndexSanity AS i
-						JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
-						WHERE i.is_XML = 1 
-						OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 61: Columnstore indexes', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-						SELECT  61 AS check_id, 
-								i.index_sanity_id,
-								150 AS Priority,
-								N'Abnormal Psychology' AS findings_group,
-								CASE WHEN i.is_NC_columnstore=1
-									THEN N'NC Columnstore Index' 
-									ELSE N'Clustered Columnstore Index' 
-									END AS finding, 
-								[database_name] AS [Database Name],
-								N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
-								i.db_schema_object_indexid AS details, 
-								i.index_definition,
-								i.secret_columns,
-								i.index_usage_summary,
-								ISNULL(sz.index_size_summary,'') AS index_size_summary
-						FROM    #IndexSanity AS i
-						JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
-						WHERE i.is_NC_columnstore = 1 OR i.is_CX_columnstore=1
-						OPTION    ( RECOMPILE );
-
-
-				RAISERROR(N'check_id 62: Spatial indexes', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-						SELECT  62 AS check_id, 
-								i.index_sanity_id,
-								150 AS Priority,
-								N'Abnormal Psychology' AS findings_group,
-								N'Spatial Index' AS finding,
-								[database_name] AS [Database Name], 
-								N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
-								i.db_schema_object_indexid AS details, 
-								i.index_definition,
-								i.secret_columns,
-								i.index_usage_summary,
-								ISNULL(sz.index_size_summary,'') AS index_size_summary
-						FROM    #IndexSanity AS i
-						JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
-						WHERE i.is_spatial = 1 
-						OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 63: Compressed indexes', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-						SELECT  63 AS check_id, 
-								i.index_sanity_id,
-								150 AS Priority,
-								N'Abnormal Psychology' AS findings_group,
-								N'Compressed Index' AS finding,
-								[database_name] AS [Database Name], 
-								N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
-								i.db_schema_object_indexid  + N'. COMPRESSION: ' + sz.data_compression_desc AS details, 
-								i.index_definition,
-								i.secret_columns,
-								i.index_usage_summary,
-								ISNULL(sz.index_size_summary,'') AS index_size_summary
-						FROM    #IndexSanity AS i
-						JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
-						WHERE sz.data_compression_desc LIKE '%PAGE%' OR sz.data_compression_desc LIKE '%ROW%' 
-						OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 64: Partitioned', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-						SELECT  64 AS check_id, 
-								i.index_sanity_id,
-								150 AS Priority,
-								N'Abnormal Psychology' AS findings_group,
-								N'Partitioned Index' AS finding,
-								[database_name] AS [Database Name], 
-								N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
-								i.db_schema_object_indexid AS details, 
-								i.index_definition,
-								i.secret_columns,
-								i.index_usage_summary,
-								ISNULL(sz.index_size_summary,'') AS index_size_summary
-						FROM    #IndexSanity AS i
-						JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
-						WHERE i.partition_key_column_name IS NOT NULL 
-						OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 65: Non-Aligned Partitioned', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-						SELECT  65 AS check_id, 
-								i.index_sanity_id,
-								150 AS Priority,
-								N'Abnormal Psychology' AS findings_group,
-								N'Non-Aligned Index on a Partitioned Table' AS finding,
-								i.[database_name] AS [Database Name], 
-								N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
-								i.db_schema_object_indexid AS details, 
-								i.index_definition,
-								i.secret_columns,
-								i.index_usage_summary,
-								ISNULL(sz.index_size_summary,'') AS index_size_summary
-						FROM    #IndexSanity AS i
-						JOIN #IndexSanity AS iParent ON
-							i.[object_id]=iParent.[object_id]
-							AND i.database_id = iParent.database_id
-							AND i.schema_name = iParent.schema_name
-							AND iParent.index_id IN (0,1) /* could be a partitioned heap or clustered table */
-							AND iParent.partition_key_column_name IS NOT NULL /* parent is partitioned*/         
-						JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
-						WHERE i.partition_key_column_name IS NULL 
-						OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 66: Recently created tables/indexes (1 week)', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-						SELECT  66 AS check_id, 
-								i.index_sanity_id,
-								200 AS Priority,
-								N'Abnormal Psychology' AS findings_group,
-								N'Recently Created Tables/Indexes (1 week)' AS finding,
-								[database_name] AS [Database Name], 
-								N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
-								i.db_schema_object_indexid + N' was created on ' + 
-									CONVERT(NVARCHAR(16),i.create_date,121) + 
-									N'. Tables/indexes which are dropped/created regularly require special methods for index tuning.'
-										 AS details, 
-								i.index_definition,
-								i.secret_columns,
-								i.index_usage_summary,
-								ISNULL(sz.index_size_summary,'') AS index_size_summary
-						FROM    #IndexSanity AS i
-						JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
-						WHERE i.create_date >= DATEADD(dd,-7,GETDATE()) 
-						OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 67: Recently modified tables/indexes (2 days)', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-						SELECT  67 AS check_id, 
-								i.index_sanity_id,
-								200 AS Priority,
-								N'Abnormal Psychology' AS findings_group,
-								N'Recently Modified Tables/Indexes (2 days)' AS finding,
-								[database_name] AS [Database Name], 
-								N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
-								i.db_schema_object_indexid + N' was modified on ' + 
-									CONVERT(NVARCHAR(16),i.modify_date,121) + 
-									N'. A large amount of recently modified indexes may mean a lot of rebuilds are occurring each night.'
-										 AS details, 
-								i.index_definition,
-								i.secret_columns,
-								i.index_usage_summary,
-								ISNULL(sz.index_size_summary,'') AS index_size_summary
-						FROM    #IndexSanity AS i
-						JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
-						WHERE i.modify_date > DATEADD(dd,-2,GETDATE()) 
-						AND /*Exclude recently created tables.*/
-						i.create_date < DATEADD(dd,-7,GETDATE()) 
-						OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 69: Column collation does not match database collation', 0,1) WITH NOWAIT;
-					WITH count_columns AS (
-								SELECT [object_id],
-									   database_id,
-									   schema_name,
-									   COUNT(*) AS column_count
-								FROM #IndexColumns ic
-								WHERE index_id IN (1,0) /*Heap or clustered only*/
-								AND collation_name <> @collation
-								GROUP BY [object_id],
-										 database_id,
-										 schema_name
-								)
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  69 AS check_id, 
-									i.index_sanity_id, 
-									150 AS Priority,
-									N'Abnormal Psychology' AS findings_group,
-									N'Column Collation Does Not Match Database Collation' AS finding,
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
-									i.db_schema_object_name 
-										+ N' has ' + CAST(column_count AS NVARCHAR(20))
-										+ N' column' + CASE WHEN column_count > 1 THEN 's' ELSE '' END
-										+ N' with a different collation than the db collation of '
-										+ @collation    AS details,
-									i.index_definition,
-									secret_columns, 
-									ISNULL(i.index_usage_summary,''),
-									ISNULL(ip.index_size_summary,'')
-							FROM    #IndexSanity i
-							JOIN    #IndexSanitySize ip ON i.index_sanity_id = ip.index_sanity_id
-							JOIN    count_columns AS cc ON i.[object_id]=cc.[object_id]
-									AND cc.database_id = i.database_id
-									AND cc.schema_name = i.schema_name
-							WHERE    i.index_id IN (1,0)
-							ORDER BY i.db_schema_object_name DESC OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 70: Replicated columns', 0,1) WITH NOWAIT;
-					WITH count_columns AS (
-								SELECT [object_id],
-									   database_id,
-									   schema_name,
-									   COUNT(*) AS column_count,
-									   SUM(CASE is_replicated WHEN 1 THEN 1 ELSE 0 END) AS replicated_column_count
-								FROM #IndexColumns ic
-								WHERE index_id IN (1,0) /*Heap or clustered only*/
-								GROUP BY object_id,
-										 database_id,
-										 schema_name
-								)
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-							SELECT  70 AS check_id, 
-									i.index_sanity_id,
-									200 AS Priority, 
-									N'Abnormal Psychology' AS findings_group,
-									N'Replicated Columns' AS finding,
-									[database_name] AS [Database Name],
-									N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
-									i.db_schema_object_name 
-										+ N' has ' + CAST(replicated_column_count AS NVARCHAR(20))
-										+ N' out of ' + CAST(column_count AS NVARCHAR(20))
-										+ N' column' + CASE WHEN column_count > 1 THEN 's' ELSE '' END
-										+ N' in one or more publications.'
-											AS details,
-									i.index_definition,
-									secret_columns, 
-									ISNULL(i.index_usage_summary,''),
-									ISNULL(ip.index_size_summary,'')
-							FROM    #IndexSanity i
-							JOIN    #IndexSanitySize ip ON i.index_sanity_id = ip.index_sanity_id
-							JOIN    count_columns AS cc ON i.[object_id]=cc.[object_id]
-									AND i.database_id = cc.database_id
-									AND i.schema_name = cc.schema_name
-							WHERE    i.index_id IN (1,0)
-								AND replicated_column_count > 0
-							ORDER BY i.db_schema_object_name DESC 
-							OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 71: Cascading updates or cascading deletes.', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary, more_info )
-				SELECT  71 AS check_id, 
-						NULL AS index_sanity_id,
-						150 AS Priority,
-						N'Abnormal Psychology' AS findings_group,
-						N'Cascading Updates or Deletes' AS finding, 
-						[database_name] AS [Database Name],
-						N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
-						N'Foreign Key ' + QUOTENAME(foreign_key_name) +
-						N' on ' + QUOTENAME(parent_object_name)  + N'(' + LTRIM(parent_fk_columns) + N')'
-							+ N' referencing ' + QUOTENAME(referenced_object_name) + N'(' + LTRIM(referenced_fk_columns) + N')'
-							+ N' has settings:'
-							+ CASE [delete_referential_action_desc] WHEN N'NO_ACTION' THEN N'' ELSE N' ON DELETE ' +[delete_referential_action_desc] END
-							+ CASE [update_referential_action_desc] WHEN N'NO_ACTION' THEN N'' ELSE N' ON UPDATE ' + [update_referential_action_desc] END
+                RAISERROR(N'check_id 22: NC indexes with 0 reads. (Borderline) and >= 10,000 writes', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  22 AS check_id, 
+                                i.index_sanity_id,
+                                10 AS Priority,
+                                N'Index Hoarder' AS findings_group,
+                                N'Unused NC Index with High Writes' AS finding, 
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/IndexHoarder' AS URL,
+                                N'Reads: 0,'
+								+ N' Writes: ' 
+								+ REPLACE(CONVERT(NVARCHAR(30), CAST((i.user_updates) AS MONEY), 1), N'.00', N'')
+								+ N' on: '
+								+ i.db_schema_object_indexid
 								AS details, 
-						[fk].[database_name] AS index_definition, 
-						N'N/A' AS secret_columns,
-						N'N/A' AS index_usage_summary,
-						N'N/A' AS index_size_summary,
-						(SELECT TOP 1 more_info FROM #IndexSanity i WHERE i.object_id=fk.parent_object_id AND i.database_id = fk.database_id AND i.schema_name = fk.schema_name)
-							AS more_info
-				FROM #ForeignKeys fk
-				WHERE ([delete_referential_action_desc] <> N'NO_ACTION'
-				OR [update_referential_action_desc] <> N'NO_ACTION')
-				OPTION    ( RECOMPILE );
-
-				RAISERROR(N'check_id 72: Unindexed foreign keys.', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary, more_info )
-				SELECT  72 AS check_id, 
-						NULL AS index_sanity_id,
-						150 AS Priority,
-						N'Abnormal Psychology' AS findings_group,
-						N'Unindexed Foreign Keys' AS finding, 
-						[database_name] AS [Database Name],
-						N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
-						N'Foreign Key ' + QUOTENAME(foreign_key_name) +
-						N' on ' + QUOTENAME(parent_object_name)  + N''
-							+ N' referencing ' + QUOTENAME(referenced_object_name) + N''
-							+ N' does not appear to have a supporting index.' AS details, 
-						N'N/A' AS index_definition, 
-						N'N/A' AS secret_columns,
-						N'N/A' AS index_usage_summary,
-						N'N/A' AS index_size_summary,
-						(SELECT TOP 1 more_info FROM #IndexSanity i WHERE i.object_id=fk.parent_object_id AND i.database_id = fk.database_id AND i.schema_name = fk.schema_name)
-							AS more_info
-				FROM #UnindexedForeignKeys AS fk
-				OPTION    ( RECOMPILE );
+                                i.index_definition, 
+                                i.secret_columns, 
+                                i.index_usage_summary,
+                                sz.index_size_summary
+                        FROM    #IndexSanity AS i
+                        JOIN    #IndexSanitySize AS sz ON i.index_sanity_id = sz.index_sanity_id
+                        WHERE    i.total_reads=0
+						    AND i.user_updates >= 10000
+                                AND i.index_id NOT IN (0,1) /*NCs only*/
+                                AND i.is_unique = 0
+                                AND sz.total_reserved_MB >= CASE WHEN (@GetAllDatabases = 1 OR @Mode = 0) THEN @ThresholdMB ELSE sz.total_reserved_MB END
+								AND @Filter <> 1 /* 1 = "ignore unused */
+                        ORDER BY i.db_schema_object_indexid
+                        OPTION    ( RECOMPILE );
 
 
-				RAISERROR(N'check_id 73: In-Memory OLTP', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-						SELECT  73 AS check_id, 
-								i.index_sanity_id,
-								150 AS Priority,
-								N'Abnormal Psychology' AS findings_group,
-								N'In-Memory OLTP' AS finding,
-								[database_name] AS [Database Name], 
-								N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
-								i.db_schema_object_indexid AS details, 
-								i.index_definition,
-								i.secret_columns,
-								i.index_usage_summary,
-								ISNULL(sz.index_size_summary,'') AS index_size_summary
-						FROM    #IndexSanity AS i
-						JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
-						WHERE i.is_in_memory_oltp = 1
+		RAISERROR(N'check_id 34: Filtered index definition columns not in index definition', 0,1) WITH NOWAIT;
+                 
+                 INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  34 AS check_id, 
+                                i.index_sanity_id,
+                                80 AS Priority,
+                                N'Abnormal Psychology' AS findings_group,
+                                N'Filter Columns Not In Index Definition' AS finding, 
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/IndexFeatures' AS URL,
+                                N'The index '
+                                + QUOTENAME(i.index_name)
+                                + N' on ['
+                                + i.db_schema_object_name
+                                + N'] has a filter on ['
+                                + i.filter_definition
+                                + N'] but is missing ['
+                                + LTRIM(i.filter_columns_not_in_index)
+                                + N'] from the index definition.'
+                                AS details, 
+                                i.index_definition, 
+                                i.secret_columns, 
+                                i.index_usage_summary,
+                                sz.index_size_summary
+                        FROM    #IndexSanity i
+                        JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
+                        WHERE   i.filter_columns_not_in_index IS NOT NULL
+                        ORDER BY i.db_schema_object_indexid
+                        OPTION    ( RECOMPILE );
+                                
+         ----------------------------------------
+        --Self Loathing Indexes : Check_id 40-49
+        ----------------------------------------
+        
+            RAISERROR(N'check_id 40: Fillfactor in nonclustered 80 percent or less', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                    SELECT  40 AS check_id, 
+                            i.index_sanity_id,
+                            100 AS Priority,
+                            N'Self Loathing Indexes' AS findings_group,
+                            N'Low Fill Factor on Nonclustered Index' AS finding, 
+                            [database_name] AS [Database Name],
+                            N'https://www.brentozar.com/go/SelfLoathing' AS URL,
+                            CAST(fill_factor AS NVARCHAR(10)) + N'% fill factor on ' + db_schema_object_indexid + N'. '+
+                                CASE WHEN (last_user_update IS NULL OR user_updates < 1)
+                                THEN N'No writes have been made.'
+                                ELSE
+                                    N'Last write was ' +  CONVERT(NVARCHAR(16),last_user_update,121) + N' and ' + 
+                                    CAST(user_updates AS NVARCHAR(25)) + N' updates have been made.'
+                                END
+                                AS details, 
+                            i.index_definition,
+                            i.secret_columns,
+                            i.index_usage_summary,
+                            sz.index_size_summary
+                    FROM    #IndexSanity AS i
+                    JOIN    #IndexSanitySize AS sz ON i.index_sanity_id = sz.index_sanity_id
+                    WHERE    index_id > 1
+                    AND    fill_factor BETWEEN 1 AND 80 OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 40: Fillfactor in clustered 80 percent or less', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                    SELECT  40 AS check_id, 
+                            i.index_sanity_id,
+                            100 AS Priority,
+                            N'Self Loathing Indexes' AS findings_group,
+                            N'Low Fill Factor on Clustered Index' AS finding, 
+                            [database_name] AS [Database Name],
+                            N'https://www.brentozar.com/go/SelfLoathing' AS URL,
+                            N'Fill factor on ' + db_schema_object_indexid + N' is ' + CAST(fill_factor AS NVARCHAR(10)) + N'%. '+
+                                CASE WHEN (last_user_update IS NULL OR user_updates < 1)
+                                THEN N'No writes have been made.'
+                                ELSE
+                                    N'Last write was ' +  CONVERT(NVARCHAR(16),last_user_update,121) + N' and ' + 
+                                    CAST(user_updates AS NVARCHAR(25)) + N' updates have been made.'
+                                END
+                                AS details, 
+                            i.index_definition,
+                            i.secret_columns,
+                            i.index_usage_summary,
+                            sz.index_size_summary
+                    FROM    #IndexSanity AS i
+                    JOIN #IndexSanitySize AS sz ON i.index_sanity_id = sz.index_sanity_id
+                    WHERE    index_id = 1
+                    AND fill_factor BETWEEN 1 AND 80 OPTION    ( RECOMPILE );
+
+
+            RAISERROR(N'check_id 43: Heaps with forwarded records', 0,1) WITH NOWAIT;
+            WITH    heaps_cte
+                      AS ( SELECT   [object_id],
+								    [database_id],
+								    [schema_name],
+                                    SUM(forwarded_fetch_count) AS forwarded_fetch_count,
+                                    SUM(leaf_delete_count) AS leaf_delete_count
+                           FROM        #IndexPartitionSanity
+                           GROUP BY    [object_id],
+								       [database_id],
+								       [schema_name]
+                           HAVING    SUM(forwarded_fetch_count) > 0)
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  43 AS check_id, 
+                                i.index_sanity_id,
+                                100 AS Priority,
+                                N'Self Loathing Indexes' AS findings_group,
+                                N'Heaps with Forwarded Fetches' AS finding, 
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/SelfLoathing' AS URL,
+                                CASE WHEN h.forwarded_fetch_count >= 922337203685477 THEN '>= 922,337,203,685,477'
+                                    WHEN @DaysUptime < 1 THEN CAST(h.forwarded_fetch_count AS NVARCHAR(256)) + N' forwarded fetches against heap: ' + db_schema_object_indexid
+                                    ELSE REPLACE(CONVERT(NVARCHAR(256),CAST(CAST(
+                                    (h.forwarded_fetch_count /*/@DaysUptime */)
+                                     AS BIGINT) AS MONEY), 1), '.00', '') 
+                                    END + N' forwarded fetches per day against heap: '
+                                + db_schema_object_indexid AS details, 
+                                i.index_definition, 
+                                i.secret_columns,
+                                i.index_usage_summary,
+                                sz.index_size_summary
+                        FROM    #IndexSanity i
+                        JOIN heaps_cte h ON i.[object_id] = h.[object_id] 
+							 AND i.[database_id] = h.[database_id]
+							 AND i.[schema_name] = h.[schema_name]
+                        JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
+                        WHERE    i.index_id = 0 
+                        AND h.forwarded_fetch_count / @DaysUptime > 1000
+                        AND sz.total_reserved_MB >= CASE WHEN NOT (@GetAllDatabases = 1 OR @Mode = 4) THEN @ThresholdMB ELSE sz.total_reserved_MB END
+                OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 44: Large Heaps with reads or writes.', 0,1) WITH NOWAIT;
+            WITH    heaps_cte
+                      AS ( SELECT   [object_id],
+								    [database_id],
+								    [schema_name], 
+									SUM(forwarded_fetch_count) AS forwarded_fetch_count,
+                                    SUM(leaf_delete_count) AS leaf_delete_count
+                           FROM        #IndexPartitionSanity
+                           GROUP BY  [object_id],
+								     [database_id],
+								     [schema_name]
+                           HAVING    SUM(forwarded_fetch_count) > 0
+                                    OR SUM(leaf_delete_count) > 0)
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  44 AS check_id, 
+                                i.index_sanity_id,
+                                100 AS Priority,
+                                N'Self Loathing Indexes' AS findings_group,
+                                N'Large Active Heap' AS finding, 
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/SelfLoathing' AS URL,
+                                N'Should this table be a heap? ' + db_schema_object_indexid AS details, 
+                                i.index_definition, 
+                                'N/A' AS secret_columns,
+                                i.index_usage_summary,
+                                sz.index_size_summary
+                        FROM    #IndexSanity i
+                        LEFT JOIN heaps_cte h ON i.[object_id] = h.[object_id] 
+								AND i.[database_id] = h.[database_id]
+								AND i.[schema_name] = h.[schema_name]
+                        JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
+                        WHERE    i.index_id = 0 
+                                AND (i.total_reads > 0 OR i.user_updates > 0)
+								AND sz.total_rows >= 100000
+                                AND h.[object_id] IS NULL /*don't duplicate the prior check.*/
+                OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 45: Medium Heaps with reads or writes.', 0,1) WITH NOWAIT;
+            WITH    heaps_cte
+                      AS ( SELECT   [object_id],
+								    [database_id],
+								    [schema_name], 
+									SUM(forwarded_fetch_count) AS forwarded_fetch_count,
+                                    SUM(leaf_delete_count) AS leaf_delete_count
+                           FROM        #IndexPartitionSanity
+                           GROUP BY  [object_id],
+								     [database_id],
+								     [schema_name]
+                           HAVING    SUM(forwarded_fetch_count) > 0
+                                    OR SUM(leaf_delete_count) > 0)
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  45 AS check_id, 
+                                i.index_sanity_id,
+                                100 AS Priority,
+                                N'Self Loathing Indexes' AS findings_group,
+                                N'Medium Active heap' AS finding, 
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/SelfLoathing' AS URL,
+                                N'Should this table be a heap? ' + db_schema_object_indexid AS details, 
+                                i.index_definition, 
+                                'N/A' AS secret_columns,
+                                i.index_usage_summary,
+                                sz.index_size_summary
+                        FROM    #IndexSanity i
+                        LEFT JOIN heaps_cte h ON i.[object_id] = h.[object_id] 
+								AND i.[database_id] = h.[database_id]
+								AND i.[schema_name] = h.[schema_name]
+                        JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
+                        WHERE    i.index_id = 0 
+                                AND 
+                                    (i.total_reads > 0 OR i.user_updates > 0)
+								AND sz.total_rows >= 10000 AND sz.total_rows < 100000
+                                AND h.[object_id] IS NULL /*don't duplicate the prior check.*/
+                OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 46: Small Heaps with reads or writes.', 0,1) WITH NOWAIT;
+            WITH    heaps_cte
+                      AS ( SELECT   [object_id],
+								    [database_id],
+								    [schema_name], 
+									SUM(forwarded_fetch_count) AS forwarded_fetch_count,
+                                    SUM(leaf_delete_count) AS leaf_delete_count
+                           FROM        #IndexPartitionSanity
+                           GROUP BY  [object_id],
+								     [database_id],
+								     [schema_name]
+                           HAVING    SUM(forwarded_fetch_count) > 0
+                                    OR SUM(leaf_delete_count) > 0)
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  46 AS check_id, 
+                                i.index_sanity_id,
+                                100 AS Priority,
+                                N'Self Loathing Indexes' AS findings_group,
+                                N'Small Active heap' AS finding, 
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/SelfLoathing' AS URL,
+                                N'Should this table be a heap? ' + db_schema_object_indexid AS details, 
+                                i.index_definition, 
+                                'N/A' AS secret_columns,
+                                i.index_usage_summary,
+                                sz.index_size_summary
+                        FROM    #IndexSanity i
+                        LEFT JOIN heaps_cte h ON i.[object_id] = h.[object_id] 
+								AND i.[database_id] = h.[database_id]
+								AND i.[schema_name] = h.[schema_name]
+                        JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
+                        WHERE    i.index_id = 0 
+                                AND 
+                                    (i.total_reads > 0 OR i.user_updates > 0)
+								AND sz.total_rows < 10000
+                                AND h.[object_id] IS NULL /*don't duplicate the prior check.*/
 						OPTION    ( RECOMPILE );
 
-			RAISERROR(N'check_id 74: Identity column with unusual seed', 0,1) WITH NOWAIT;
-				INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												secret_columns, index_usage_summary, index_size_summary )
-						SELECT  74 AS check_id, 
-								i.index_sanity_id, 
-								200 AS Priority,
-								N'Abnormal Psychology' AS findings_group,
-								N'Identity Column Using a Negative Seed or Increment Other Than 1' AS finding,
-								[database_name] AS [Database Name],
-								N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
-								i.db_schema_object_name + N'.' +  QUOTENAME(ic.column_name)
-									+ N' is an identity with type ' + ic.system_type_name 
-									+ N', last value of ' 
-										+ ISNULL((CONVERT(NVARCHAR(256),CAST(ic.last_value AS DECIMAL(38,0)), 1)),N'NULL')
-									+ N', seed of '
-										+ ISNULL((CONVERT(NVARCHAR(256),CAST(ic.seed_value AS DECIMAL(38,0)), 1)),N'NULL')
-									+ N', increment of ' + CAST(ic.increment_value AS NVARCHAR(256)) 
-									+ N', and range of ' +
-										CASE ic.system_type_name WHEN 'int' THEN N'+/- 2,147,483,647'
-											WHEN 'smallint' THEN N'+/- 32,768'
-											WHEN 'tinyint' THEN N'0 to 255'
-											ELSE 'unknown'
-										END
-										AS details,
-								i.index_definition,
-								secret_columns, 
-								ISNULL(i.index_usage_summary,''),
-								ISNULL(ip.index_size_summary,'')
-						FROM    #IndexSanity i
-						JOIN    #IndexColumns ic ON
-							i.object_id=ic.object_id
+				            RAISERROR(N'check_id 47: Heap with a Nonclustered Primary Key', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  47 AS check_id, 
+                                i.index_sanity_id,
+                                100 AS Priority,
+                                N'Self Loathing Indexes' AS findings_group,
+                                N'Heap with a Nonclustered Primary Key' AS finding, 
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/SelfLoathing' AS URL,
+								db_schema_object_indexid + N' is a HEAP with a Nonclustered Primary Key' AS details, 
+                                i.index_definition, 
+                                i.secret_columns,
+                                i.index_usage_summary,
+                                sz.index_size_summary
+                        FROM    #IndexSanity i
+                        JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
+                        WHERE    i.index_type = 2 AND i.is_primary_key = 1
+                        AND EXISTS 
+                            (
+                              SELECT 1/0 
+                              FROM #IndexSanity AS isa
+                              WHERE i.database_id = isa.database_id
+                              AND   i.object_id = isa.object_id
+                              AND   isa.index_id = 0
+                            )
+						OPTION    ( RECOMPILE );
+
+	            RAISERROR(N'check_id 48: Nonclustered indexes with a bad read to write ratio', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  48 AS check_id, 
+                                i.index_sanity_id,
+                                100 AS Priority,
+                                N'Index Hoarder' AS findings_group,
+                                N'NC index with High Writes:Reads' AS finding, 
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/IndexHoarder' AS URL,
+                                N'Reads: '
+								+ REPLACE(CONVERT(NVARCHAR(30), CAST((i.total_reads) AS MONEY), 1), N'.00', N'') 
+								+ N' Writes: ' 
+								+ REPLACE(CONVERT(NVARCHAR(30), CAST((i.user_updates) AS MONEY), 1), N'.00', N'')
+								+ N' on: '
+								+ i.db_schema_object_indexid AS details, 
+                                i.index_definition, 
+                                i.secret_columns, 
+                                i.index_usage_summary,
+                                sz.index_size_summary
+                        FROM    #IndexSanity i
+                        JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
+                        WHERE    i.total_reads > 0 /*Not totally unused*/
+								AND i.user_updates >= 10000 /*Decent write activity*/
+								AND i.total_reads < 10000
+								AND ((i.total_reads * 10) < i.user_updates) /*10x more writes than reads*/
+                                AND i.index_id NOT IN (0,1) /*NCs only*/
+                                AND i.is_unique = 0 
+                                AND sz.total_reserved_MB >= CASE WHEN (@GetAllDatabases = 1 OR @Mode = 0) THEN @ThresholdMB ELSE sz.total_reserved_MB END
+                        ORDER BY i.db_schema_object_indexid
+                        OPTION    ( RECOMPILE );
+
+        ----------------------------------------
+        --Indexaphobia
+        --Missing indexes with value >= 5 million: : Check_id 50-59
+        ----------------------------------------
+            RAISERROR(N'check_id 50: Indexaphobia.', 0,1) WITH NOWAIT;
+            WITH    index_size_cte
+                      AS ( SELECT   i.database_id,
+									i.schema_name,
+									i.[object_id], 
+                                    MAX(i.index_sanity_id) AS index_sanity_id,
+									ISNULL(NULLIF(MAX(DATEDIFF(DAY, i.create_date, SYSDATETIME())), 0), 1) AS create_days,
+                                ISNULL (
+                                    CAST(SUM(CASE WHEN index_id NOT IN (0,1) THEN 1 ELSE 0 END)
+                                         AS NVARCHAR(30))+ N' NC indexes exist (' + 
+                                    CASE WHEN SUM(CASE WHEN index_id NOT IN (0,1) THEN sz.total_reserved_MB ELSE 0 END) > 1024
+                                        THEN CAST(CAST(SUM(CASE WHEN index_id NOT IN (0,1) THEN sz.total_reserved_MB ELSE 0 END )/1024. 
+
+                                            AS NUMERIC(29,1)) AS NVARCHAR(30)) + N'GB); ' 
+                                        ELSE CAST(SUM(CASE WHEN index_id NOT IN (0,1) THEN sz.total_reserved_MB ELSE 0 END) 
+                                            AS NVARCHAR(30)) + N'MB); '
+                                    END + 
+                                        CASE WHEN MAX(sz.[total_rows]) >= 922337203685477 THEN '>= 922,337,203,685,477'
+                                        ELSE REPLACE(CONVERT(NVARCHAR(30),CAST(MAX(sz.[total_rows]) AS MONEY), 1), '.00', '') 
+                                        END +
+                                    + N' Estimated Rows;' 
+                                ,N'') AS index_size_summary
+                            FROM    #IndexSanity AS i
+                            LEFT    JOIN #IndexSanitySize AS sz ON i.index_sanity_id = sz.index_sanity_id  AND i.database_id = sz.database_id
+							WHERE i.is_hypothetical = 0
+                                  AND i.is_disabled = 0
+                           GROUP BY    i.database_id, i.schema_name, i.[object_id])
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               index_usage_summary, index_size_summary, create_tsql, more_info, sample_query_plan )
+                        
+                        SELECT check_id, t.index_sanity_id, t.check_id, t.findings_group, t.finding, t.[Database Name], t.URL, t.details, t.[definition],
+                                index_estimated_impact, t.index_size_summary, create_tsql, more_info, sample_query_plan
+                        FROM
+                        (
+                            SELECT  ROW_NUMBER() OVER (ORDER BY magic_benefit_number DESC) AS rownum,
+                                50 AS check_id, 
+                                sz.index_sanity_id,
+                                40 AS Priority,
+                                N'Indexaphobia' AS findings_group,
+                                N'High Value Missing Index' AS finding, 
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/Indexaphobia' AS URL,
+                                mi.[statement] + 
+                                N' Est. benefit per day: ' + 
+                                    CASE WHEN magic_benefit_number >= 922337203685477 THEN '>= 922,337,203,685,477'
+                                    ELSE REPLACE(CONVERT(NVARCHAR(256),CAST(CAST(
+                                    (magic_benefit_number/@DaysUptime)
+                                     AS BIGINT) AS MONEY), 1), '.00', '') 
+                                    END AS details,
+                                missing_index_details AS [definition],
+                                index_estimated_impact,
+                                sz.index_size_summary,
+                                mi.create_tsql,
+                                mi.more_info,
+                                magic_benefit_number,
+								mi.is_low,
+                                mi.sample_query_plan
+                        FROM    #MissingIndexes mi
+                                LEFT JOIN index_size_cte sz ON mi.[object_id] = sz.object_id 
+										  AND mi.database_id = sz.database_id
+										  AND mi.schema_name = sz.schema_name
+                                        /* Minimum benefit threshold = 100k/day of uptime OR since table creation date, whichever is lower*/
+                        WHERE @ShowAllMissingIndexRequests=1
+                        OR ( @Mode = 4 AND (magic_benefit_number / CASE WHEN sz.create_days < @DaysUptime THEN sz.create_days ELSE @DaysUptime END) >= 100000 ) 
+						OR (magic_benefit_number / CASE WHEN sz.create_days < @DaysUptime THEN sz.create_days ELSE @DaysUptime END) >= 100000
+                        ) AS t
+                        WHERE t.rownum <= CASE WHEN (@Mode <> 4) THEN 20 ELSE t.rownum END
+                        ORDER BY magic_benefit_number DESC
+						OPTION    ( RECOMPILE );
+
+
+
+            RAISERROR(N'check_id 68: Identity columns within 30 percent of the end of range', 0,1) WITH NOWAIT;
+            -- Allowed Ranges: 
+                --int -2,147,483,648 to 2,147,483,647
+                --smallint -32,768 to 32,768
+                --tinyint 0 to 255
+
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  68 AS check_id, 
+                                i.index_sanity_id, 
+                                80 AS Priority,
+                                N'Abnormal Psychology' AS findings_group,
+                                N'Identity Column Within ' +                                     
+                                    CAST (calc1.percent_remaining AS NVARCHAR(256))
+                                    + N' Percent End of Range' AS finding,
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
+                                i.db_schema_object_name + N'.' +  QUOTENAME(ic.column_name)
+                                    + N' is an identity with type ' + ic.system_type_name 
+                                    + N', last value of ' 
+                                        + ISNULL((CONVERT(NVARCHAR(256),CAST(ic.last_value AS DECIMAL(38,0)), 1)),N'NULL')
+                                    + N', seed of '
+                                        + ISNULL((CONVERT(NVARCHAR(256),CAST(ic.seed_value AS DECIMAL(38,0)), 1)),N'NULL')
+                                    + N', increment of ' + CAST(ic.increment_value AS NVARCHAR(256)) 
+                                    + N', and range of ' +
+                                        CASE ic.system_type_name WHEN 'int' THEN N'+/- 2,147,483,647'
+                                            WHEN 'smallint' THEN N'+/- 32,768'
+                                            WHEN 'tinyint' THEN N'0 to 255'
+                                            ELSE 'unknown'
+                                        END
+                                        AS details,
+                                i.index_definition,
+                                secret_columns, 
+                                ISNULL(i.index_usage_summary,''),
+                                ISNULL(ip.index_size_summary,'')
+                        FROM    #IndexSanity i
+                        JOIN    #IndexColumns ic ON
+                            i.object_id=ic.object_id
 							AND i.database_id = ic.database_id
 							AND i.schema_name = ic.schema_name
-							AND i.index_id IN (0,1) /* heaps and cx only */
-							AND ic.is_identity=1
-							AND ic.system_type_name IN ('tinyint', 'smallint', 'int')
-						JOIN    #IndexSanitySize ip ON i.index_sanity_id = ip.index_sanity_id
-						WHERE    i.index_id IN (1,0)
-							AND (ic.seed_value < 0 OR ic.increment_value <> 1)
-						ORDER BY finding, details DESC 
+                            AND i.index_id IN (0,1) /* heaps and cx only */
+                            AND ic.is_identity=1
+                            AND ic.system_type_name IN ('tinyint', 'smallint', 'int')
+                        JOIN    #IndexSanitySize ip ON i.index_sanity_id = ip.index_sanity_id
+                        CROSS APPLY (
+                            SELECT CAST(CASE WHEN ic.increment_value >= 0
+                                    THEN
+                                        CASE ic.system_type_name 
+                                            WHEN 'int' THEN (2147483647 - (ISNULL(ic.last_value,ic.seed_value) + ic.increment_value)) / 2147483647.*100
+                                            WHEN 'smallint' THEN (32768 - (ISNULL(ic.last_value,ic.seed_value) + ic.increment_value)) / 32768.*100
+                                            WHEN 'tinyint' THEN ( 255 - (ISNULL(ic.last_value,ic.seed_value) + ic.increment_value)) / 255.*100
+                                            ELSE 999
+                                        END
+                                ELSE --ic.increment_value is negative
+                                        CASE ic.system_type_name 
+                                            WHEN 'int' THEN ABS(-2147483647 - (ISNULL(ic.last_value,ic.seed_value) + ic.increment_value)) / 2147483647.*100
+                                            WHEN 'smallint' THEN ABS(-32768 - (ISNULL(ic.last_value,ic.seed_value) + ic.increment_value)) / 32768.*100
+                                            WHEN 'tinyint' THEN ABS( 0 - (ISNULL(ic.last_value,ic.seed_value) + ic.increment_value)) / 255.*100
+                                            ELSE -1
+                                        END 
+                                END AS NUMERIC(5,1)) AS percent_remaining
+                                ) AS calc1
+                        WHERE    i.index_id IN (1,0)
+                            AND calc1.percent_remaining <= 30
+                        OPTION (RECOMPILE);
+
+
+		RAISERROR(N'check_id 72: Columnstore indexes with Trace Flag 834', 0,1) WITH NOWAIT;
+            IF EXISTS (SELECT * FROM #IndexSanity WHERE index_type IN (5,6))
+			AND EXISTS (SELECT * FROM #TraceStatus WHERE TraceFlag = 834 AND status = 1)
+			BEGIN
+			INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                            secret_columns, index_usage_summary, index_size_summary )
+                SELECT  72 AS check_id, 
+                        i.index_sanity_id,
+                        80 AS Priority,
+                        N'Abnormal Psychology' AS findings_group,
+                        'Columnstore Indexes with Trace Flag 834' AS finding, 
+                        [database_name] AS [Database Name],
+                        N'https://support.microsoft.com/en-us/kb/3210239' AS URL,
+                        i.db_schema_object_indexid AS details, 
+                        i.index_definition,
+                        i.secret_columns,
+                        i.index_usage_summary,
+                        ISNULL(sz.index_size_summary,'') AS index_size_summary
+                FROM    #IndexSanity AS i
+                JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
+                WHERE i.index_type IN (5,6)
+                OPTION    ( RECOMPILE );
+			END;
+
+        ----------------------------------------
+        --Statistics Info: Check_id 90-99
+        ----------------------------------------
+
+        RAISERROR(N'check_id 90: Outdated statistics', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+		SELECT  90 AS check_id, 
+				90 AS Priority,
+				'Functioning Statistaholics' AS findings_group,
+				'Statistics Not Updated Recently',
+				s.database_name,
+				'https://www.brentozar.com/go/stats' AS URL,
+				'Statistics on this table were last updated ' + 
+					CASE WHEN s.last_statistics_update IS NULL THEN N' NEVER '
+					ELSE CONVERT(NVARCHAR(20), s.last_statistics_update) + 
+						' have had ' + CONVERT(NVARCHAR(100), s.modification_counter) +
+						' modifications in that time, which is ' +
+						CONVERT(NVARCHAR(100), s.percent_modifications) + 
+						'% of the table.'
+					END AS details,
+				QUOTENAME(database_name) + '.' + QUOTENAME(s.schema_name) + '.' + QUOTENAME(s.table_name) + '.' + QUOTENAME(s.index_name) + '.' + QUOTENAME(s.statistics_name) + '.' + QUOTENAME(s.column_names) AS index_definition,
+				'N/A' AS secret_columns,
+				'N/A' AS index_usage_summary,
+				'N/A' AS index_size_summary
+		FROM #Statistics AS s
+		WHERE s.last_statistics_update <= CONVERT(DATETIME, GETDATE() - 30) 
+		AND s.percent_modifications >= 10. 
+		AND s.rows >= 10000
+		OPTION    ( RECOMPILE );
+
+        RAISERROR(N'check_id 91: Statistics with a low sample rate', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+		SELECT  91 AS check_id, 
+				90 AS Priority,
+				'Functioning Statistaholics' AS findings_group,
+				'Low Sampling Rates',
+				s.database_name,
+				'https://www.brentozar.com/go/stats' AS URL,
+				'Only ' + CONVERT(NVARCHAR(100), s.percent_sampled) + '% of the rows were sampled during the last statistics update. This may lead to poor cardinality estimates.' AS details,
+				QUOTENAME(database_name) + '.' + QUOTENAME(s.schema_name) + '.' + QUOTENAME(s.table_name) + '.' + QUOTENAME(s.index_name) + '.' + QUOTENAME(s.statistics_name) + '.' + QUOTENAME(s.column_names) AS index_definition,
+				'N/A' AS secret_columns,
+				'N/A' AS index_usage_summary,
+				'N/A' AS index_size_summary
+		FROM #Statistics AS s
+		WHERE (s.rows BETWEEN 10000 AND 1000000 AND s.percent_sampled < 10)
+		  OR (s.rows > 1000000 AND s.percent_sampled < 1)
+		OPTION    ( RECOMPILE );
+
+        RAISERROR(N'check_id 92: Statistics with NO RECOMPUTE', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+		SELECT  92 AS check_id, 
+				90 AS Priority,
+				'Functioning Statistaholics' AS findings_group,
+				'Statistics With NO RECOMPUTE',
+				s.database_name,
+				'https://www.brentozar.com/go/stats' AS URL,
+				'The statistic ' + QUOTENAME(s.statistics_name) +  ' is set to not recompute. This can be helpful if data is really skewed, but harmful if you expect automatic statistics updates.' AS details,
+				QUOTENAME(database_name) + '.' + QUOTENAME(s.schema_name) + '.' + QUOTENAME(s.table_name) + '.' + QUOTENAME(s.index_name) + '.' + QUOTENAME(s.statistics_name) + '.' + QUOTENAME(s.column_names) AS index_definition,
+				'N/A' AS secret_columns,
+				'N/A' AS index_usage_summary,
+				'N/A' AS index_size_summary
+		FROM #Statistics AS s
+		WHERE s.no_recompute = 1
+		OPTION    ( RECOMPILE );
+
+
+	     RAISERROR(N'check_id 94: Check Constraints That Reference Functions', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+		SELECT  94 AS check_id, 
+				100 AS Priority,
+				'Serial Forcer' AS findings_group,
+				'Check Constraint with Scalar UDF' AS finding,
+				cc.database_name,
+				'https://www.brentozar.com/go/computedscalar' AS URL,
+				'The check constraint ' + QUOTENAME(cc.constraint_name) + ' on ' + QUOTENAME(cc.schema_name) + '.' + QUOTENAME(cc.table_name) + ' is based on ' + cc.definition 
+				+ '. That indicates it may reference a scalar function, or a CLR function with data access, which can cause all queries and maintenance to run serially.' AS details,
+				cc.column_definition,
+				'N/A' AS secret_columns,
+				'N/A' AS index_usage_summary,
+				'N/A' AS index_size_summary
+		FROM #CheckConstraints AS cc
+		WHERE cc.is_function = 1
+		OPTION    ( RECOMPILE );
+
+		RAISERROR(N'check_id 99: Computed Columns That Reference Functions', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+		SELECT  99 AS check_id, 
+				100 AS Priority,
+				'Serial Forcer' AS findings_group,
+				'Computed Column with Scalar UDF' AS finding,
+				cc.database_name,
+				'https://www.brentozar.com/go/serialudf' AS URL,
+				'The computed column ' + QUOTENAME(cc.column_name) + ' on ' + QUOTENAME(cc.schema_name) + '.' + QUOTENAME(cc.table_name) + ' is based on ' + cc.definition 
+				+ '. That indicates it may reference a scalar function, or a CLR function with data access, which can cause all queries and maintenance to run serially.' AS details,
+				cc.column_definition,
+				'N/A' AS secret_columns,
+				'N/A' AS index_usage_summary,
+				'N/A' AS index_size_summary
+		FROM #ComputedColumns AS cc
+		WHERE cc.is_function = 1
+		OPTION    ( RECOMPILE );
+
+
+
+	END /* IF @Mode IN (0, 4) DIAGNOSE priorities 1-100 */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    IF @Mode = 4 /* DIAGNOSE*/
+    BEGIN;
+        RAISERROR(N'@Mode=4, running rules for priorities 101+.', 0,1) WITH NOWAIT;
+
+            RAISERROR(N'check_id 21: More Than 5 Percent NC Indexes Are Unused', 0,1) WITH NOWAIT;
+            DECLARE @percent_NC_indexes_unused NUMERIC(29,1);
+            DECLARE @NC_indexes_unused_reserved_MB NUMERIC(29,1);
+
+            SELECT  @percent_NC_indexes_unused = ( 100.00 * SUM(CASE 
+					                                                WHEN total_reads = 0 
+																	THEN 1
+                                                                    ELSE 0
+                                                                    END) ) / COUNT(*),
+                    @NC_indexes_unused_reserved_MB = SUM(CASE 
+							                                    WHEN total_reads = 0 
+																THEN sz.total_reserved_MB
+                                                                ELSE 0
+                                                            END) 
+            FROM    #IndexSanity i
+            JOIN    #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
+            WHERE    index_id NOT IN ( 0, 1 ) 
+                    AND i.is_unique = 0
+					/*Skipping tables created in the last week, or modified in past 2 days*/
+					AND	i.create_date >= DATEADD(dd,-7,GETDATE()) 
+					AND i.modify_date > DATEADD(dd,-2,GETDATE()) 
+            OPTION    ( RECOMPILE );
+            IF @percent_NC_indexes_unused >= 5 
+            INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                            secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  21 AS check_id, 
+                                MAX(i.index_sanity_id) AS index_sanity_id, 
+                                150 AS Priority,
+                                N'Index Hoarder' AS findings_group,
+                                N'More Than 5 Percent NC Indexes Are Unused' AS finding,
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/IndexHoarder' AS URL,
+                                CAST (@percent_NC_indexes_unused AS NVARCHAR(30)) + N' percent NC indexes (' + CAST(COUNT(*) AS NVARCHAR(10)) + N') unused. ' +
+                                N'These take up ' + CAST (@NC_indexes_unused_reserved_MB AS NVARCHAR(30)) + N'MB of space.' AS details,
+                                i.database_name + ' (' + CAST (COUNT(*) AS NVARCHAR(30)) + N' indexes)' AS index_definition,
+                                '' AS secret_columns, 
+                                CAST(SUM(total_reads) AS NVARCHAR(256)) + N' reads (ALL); '
+                                    + CAST(SUM([user_updates]) AS NVARCHAR(256)) + N' writes (ALL)' AS index_usage_summary,
+                                
+                                REPLACE(CONVERT(NVARCHAR(30),CAST(MAX([total_rows]) AS MONEY), 1), '.00', '') + N' rows (MAX)'
+                                    + CASE WHEN SUM(total_reserved_MB) > 1024 THEN 
+                                        N'; ' + CAST(CAST(SUM(total_reserved_MB)/1024. AS NUMERIC(29,1)) AS NVARCHAR(30)) + 'GB (ALL)'
+                                    WHEN SUM(total_reserved_MB) > 0 THEN
+                                        N'; ' + CAST(CAST(SUM(total_reserved_MB) AS NUMERIC(29,1)) AS NVARCHAR(30)) + 'MB (ALL)'
+                                    ELSE ''
+                                    END AS index_size_summary
+                        FROM    #IndexSanity i
+                        JOIN    #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
+                        WHERE    index_id NOT IN ( 0, 1 )
+                                AND i.is_unique = 0
+                                AND total_reads = 0
+								/*Skipping tables created in the last week, or modified in past 2 days*/
+								AND	i.create_date >= DATEADD(dd,-7,GETDATE()) 
+								AND i.modify_date > DATEADD(dd,-2,GETDATE())
+                        GROUP BY i.database_name 
+                OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 23: Indexes with 7 or more columns. (Borderline)', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                    SELECT  23 AS check_id, 
+                            i.index_sanity_id,
+                            150 AS Priority, 
+                            N'Index Hoarder' AS findings_group,
+                            N'Borderline: Wide Indexes (7 or More Columns)' AS finding, 
+                            [database_name] AS [Database Name],
+                            N'https://www.brentozar.com/go/IndexHoarder' AS URL,
+                            CAST(count_key_columns + count_included_columns AS NVARCHAR(10)) + ' columns on '
+                            + i.db_schema_object_indexid AS details, i.index_definition, 
+                            i.secret_columns, 
+                            i.index_usage_summary,
+                            sz.index_size_summary
+                    FROM    #IndexSanity AS i
+                    JOIN    #IndexSanitySize AS sz ON i.index_sanity_id = sz.index_sanity_id
+                    WHERE    ( count_key_columns + count_included_columns ) >= 7
+                    OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 24: Wide clustered indexes (> 3 columns or > 16 bytes).', 0,1) WITH NOWAIT;
+                WITH count_columns AS (
+                            SELECT database_id, [object_id],
+                                SUM(CASE max_length WHEN -1 THEN 0 ELSE max_length END) AS sum_max_length
+                            FROM #IndexColumns ic
+                            WHERE index_id IN (1,0) /*Heap or clustered only*/
+                            AND key_ordinal > 0
+                            GROUP BY database_id, object_id
+                            )
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  24 AS check_id, 
+                                i.index_sanity_id, 
+                                150 AS Priority,
+                                N'Index Hoarder' AS findings_group,
+                                N'Wide Clustered Index (> 3 columns OR > 16 bytes)' AS finding,
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/IndexHoarder' AS URL,
+                                CAST (i.count_key_columns AS NVARCHAR(10)) + N' columns with potential size of '
+                                    + CAST(cc.sum_max_length AS NVARCHAR(10))
+                                    + N' bytes in clustered index:' + i.db_schema_object_name 
+                                    + N'. ' + 
+                                        (SELECT CAST(COUNT(*) AS NVARCHAR(23)) 
+										 FROM #IndexSanity i2 
+                                         WHERE i2.[object_id]=i.[object_id] 
+										 AND i2.database_id = i.database_id 
+										 AND i2.index_id <> 1
+                                         AND i2.is_disabled=0 
+										 AND i2.is_hypothetical=0)
+                                        + N' NC indexes on the table.'
+                                    AS details,
+                                i.index_definition,
+                                secret_columns, 
+                                i.index_usage_summary,
+                                ip.index_size_summary
+                        FROM    #IndexSanity i
+                        JOIN    #IndexSanitySize ip ON i.index_sanity_id = ip.index_sanity_id
+                        JOIN    count_columns AS cc ON i.[object_id]=cc.[object_id]
+                                                   AND i.database_id = cc.database_id
+                        WHERE    index_id = 1 /* clustered only */
+                                AND 
+                                    (count_key_columns > 3 /*More than three key columns.*/
+                                    OR cc.sum_max_length > 16 /*More than 16 bytes in key */)
+									AND i.is_CX_columnstore = 0
+                        ORDER BY i.db_schema_object_name DESC OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 25: Addicted to nullable columns.', 0,1) WITH NOWAIT;
+                WITH count_columns AS (
+                            SELECT [object_id],
+								   [database_id],
+								   [schema_name],
+                                SUM(CASE is_nullable WHEN 1 THEN 0 ELSE 1 END) AS non_nullable_columns,
+                                COUNT(*) AS total_columns
+                            FROM #IndexColumns ic
+                            WHERE index_id IN (1,0) /*Heap or clustered only*/
+                            GROUP BY [object_id],
+								     [database_id],
+								     [schema_name]
+                            )
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  25 AS check_id, 
+                                i.index_sanity_id, 
+                                200 AS Priority,
+                                N'Index Hoarder' AS findings_group,
+                                N'Addicted to Nulls' AS finding,
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/IndexHoarder' AS URL,
+                                i.db_schema_object_name 
+                                    + N' allows null in ' + CAST((total_columns-non_nullable_columns) AS NVARCHAR(10))
+                                    + N' of ' + CAST(total_columns AS NVARCHAR(10))
+                                    + N' columns.' AS details,
+                                i.index_definition,
+                                secret_columns, 
+                                ISNULL(i.index_usage_summary,''),
+                                ISNULL(ip.index_size_summary,'')
+                        FROM    #IndexSanity i
+                        JOIN    #IndexSanitySize ip ON i.index_sanity_id = ip.index_sanity_id
+                        JOIN    count_columns AS cc ON i.[object_id]=cc.[object_id]
+								AND cc.database_id = ip.database_id
+								AND cc.[schema_name] = ip.[schema_name]
+                        WHERE    i.index_id IN (1,0)
+                            AND cc.non_nullable_columns < 2
+                            AND cc.total_columns > 3
+                        ORDER BY i.db_schema_object_name DESC OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 26: Wide tables (35+ cols or > 2000 non-LOB bytes).', 0,1) WITH NOWAIT;
+                WITH count_columns AS (
+                            SELECT [object_id],
+								   [database_id],
+								   [schema_name],
+                                SUM(CASE max_length WHEN -1 THEN 1 ELSE 0 END) AS count_lob_columns,
+                                SUM(CASE max_length WHEN -1 THEN 0 ELSE max_length END) AS sum_max_length,
+                                COUNT(*) AS total_columns
+                            FROM #IndexColumns ic
+                            WHERE index_id IN (1,0) /*Heap or clustered only*/
+                            GROUP BY [object_id],
+								     [database_id],
+								     [schema_name]
+                            )
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  26 AS check_id, 
+                                i.index_sanity_id, 
+                                150 AS Priority,
+                                N'Index Hoarder' AS findings_group,
+                                N'Wide Tables: 35+ cols or > 2000 non-LOB bytes' AS finding,
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/IndexHoarder' AS URL,
+                                i.db_schema_object_name 
+                                    + N' has ' + CAST((total_columns) AS NVARCHAR(10))
+                                    + N' total columns with a max possible width of ' + CAST(sum_max_length AS NVARCHAR(10))
+                                    + N' bytes.' +
+                                    CASE WHEN count_lob_columns > 0 THEN CAST((count_lob_columns) AS NVARCHAR(10))
+                                        + ' columns are LOB types.' ELSE ''
+                                    END
+                                        AS details,
+                                i.index_definition,
+                                secret_columns, 
+                                ISNULL(i.index_usage_summary,''),
+                                ISNULL(ip.index_size_summary,'')
+                        FROM    #IndexSanity i
+                        JOIN    #IndexSanitySize ip ON i.index_sanity_id = ip.index_sanity_id
+                        JOIN    count_columns AS cc ON i.[object_id]=cc.[object_id]
+								AND cc.database_id = i.database_id
+								AND cc.[schema_name] = i.[schema_name]
+                        WHERE    i.index_id IN (1,0)
+                            AND 
+                            (cc.total_columns >= 35 OR
+                            cc.sum_max_length >= 2000)
+                        ORDER BY i.db_schema_object_name DESC OPTION    ( RECOMPILE );
+                    
+            RAISERROR(N'check_id 27: Addicted to strings.', 0,1) WITH NOWAIT;
+                WITH count_columns AS (
+                            SELECT [object_id],
+								   [database_id],
+								   [schema_name],
+                                SUM(CASE WHEN system_type_name IN ('varchar','nvarchar','char') OR max_length=-1 THEN 1 ELSE 0 END) AS string_or_LOB_columns,
+                                COUNT(*) AS total_columns
+                            FROM #IndexColumns ic
+                            WHERE index_id IN (1,0) /*Heap or clustered only*/
+                            GROUP BY [object_id],
+								     [database_id],
+								     [schema_name]
+                            )
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  27 AS check_id, 
+                                i.index_sanity_id, 
+                                200 AS Priority,
+                                N'Index Hoarder' AS findings_group,
+                                N'Addicted to strings' AS finding,
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/IndexHoarder' AS URL,
+                                i.db_schema_object_name 
+                                    + N' uses string or LOB types for ' + CAST((string_or_LOB_columns) AS NVARCHAR(10))
+                                    + N' of ' + CAST(total_columns AS NVARCHAR(10))
+                                    + N' columns. Check if data types are valid.' AS details,
+                                i.index_definition,
+                                secret_columns, 
+                                ISNULL(i.index_usage_summary,''),
+                                ISNULL(ip.index_size_summary,'')
+                        FROM    #IndexSanity i
+                        JOIN    #IndexSanitySize ip ON i.index_sanity_id = ip.index_sanity_id
+                        JOIN    count_columns AS cc ON i.[object_id]=cc.[object_id]
+								AND cc.database_id = i.database_id
+								AND cc.[schema_name] = i.[schema_name]
+                        CROSS APPLY (SELECT cc.total_columns - string_or_LOB_columns AS non_string_or_lob_columns) AS calc1
+                        WHERE    i.index_id IN (1,0)
+                            AND calc1.non_string_or_lob_columns <= 1
+                            AND cc.total_columns > 3
+                        ORDER BY i.db_schema_object_name DESC OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 28: Non-unique clustered index.', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  28 AS check_id, 
+                                i.index_sanity_id, 
+                                150 AS Priority,
+                                N'Index Hoarder' AS findings_group,
+                                N'Non-Unique Clustered Index' AS finding,
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/IndexHoarder' AS URL,
+                                N'Uniquifiers will be required! Clustered index: ' + i.db_schema_object_name 
+                                    + N' and all NC indexes. ' + 
+                                        (SELECT CAST(COUNT(*) AS NVARCHAR(23)) 
+										 FROM #IndexSanity i2 
+                                         WHERE i2.[object_id]=i.[object_id] 
+										 AND i2.database_id = i.database_id 
+										 AND i2.index_id <> 1
+                                         AND i2.is_disabled=0 
+										 AND i2.is_hypothetical=0)
+                                        + N' NC indexes on the table.'
+                                    AS details,
+                                i.index_definition,
+                                secret_columns, 
+                                i.index_usage_summary,
+                                ip.index_size_summary
+                        FROM    #IndexSanity i
+                        JOIN    #IndexSanitySize ip ON i.index_sanity_id = ip.index_sanity_id
+                        WHERE    index_id = 1 /* clustered only */
+                                AND is_unique=0 /* not unique */
+                                AND is_CX_columnstore=0 /* not a clustered columnstore-- no unique option on those */
+                        ORDER BY i.db_schema_object_name DESC OPTION    ( RECOMPILE );
+
+        RAISERROR(N'check_id 29: NC indexes with 0 reads. (Borderline) and < 10,000 writes', 0,1) WITH NOWAIT;
+        INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                        secret_columns, index_usage_summary, index_size_summary )
+                SELECT  29 AS check_id, 
+                        i.index_sanity_id,
+                        150 AS Priority,
+                        N'Index Hoarder' AS findings_group,
+                        N'Unused NC index with Low Writes' AS finding, 
+                        [database_name] AS [Database Name],
+                        N'https://www.brentozar.com/go/IndexHoarder' AS URL,
+                        N'0 reads: ' + i.db_schema_object_indexid AS details, 
+                        i.index_definition, 
+                        i.secret_columns, 
+                        i.index_usage_summary,
+                        sz.index_size_summary
+                FROM    #IndexSanity AS i
+                JOIN    #IndexSanitySize AS sz ON i.index_sanity_id = sz.index_sanity_id
+                WHERE    i.total_reads=0
+						AND i.user_updates < 10000
+                        AND i.index_id NOT IN (0,1) /*NCs only*/
+                        AND i.is_unique = 0
+                        AND sz.total_reserved_MB >= CASE WHEN (@GetAllDatabases = 1 OR @Mode = 0) THEN @ThresholdMB ELSE sz.total_reserved_MB END
+						/*Skipping tables created in the last week, or modified in past 2 days*/
+						AND	i.create_date >= DATEADD(dd,-7,GETDATE()) 
+						AND i.modify_date > DATEADD(dd,-2,GETDATE())
+                ORDER BY i.db_schema_object_indexid
+                OPTION    ( RECOMPILE );
+
+
+        ----------------------------------------
+        --Feature-Phobic Indexes: Check_id 30-39
+        ---------------------------------------- 
+            RAISERROR(N'check_id 30: No indexes with includes', 0,1) WITH NOWAIT;
+            /* This does not work the way you'd expect with @GetAllDatabases = 1. For details:
+               https://github.com/BrentOzarULTD/SQL-Server-First-Responder-Kit/issues/825
+            */
+
+			SELECT  database_name,
+					SUM(CASE WHEN count_included_columns > 0 THEN 1 ELSE 0 END) AS number_indexes_with_includes,
+					100.* SUM(CASE WHEN count_included_columns > 0 THEN 1 ELSE 0 END) / ( 1.0 * COUNT(*) ) AS percent_indexes_with_includes
+			INTO #index_includes
+            FROM    #IndexSanity
+			WHERE is_hypothetical = 0
+			AND is_disabled = 0
+			AND NOT (@GetAllDatabases = 1 OR @Mode = 0)
+			GROUP BY database_name;
+
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  30 AS check_id, 
+                                NULL AS index_sanity_id, 
+                                250 AS Priority,
+                                N'Feature-Phobic Indexes' AS findings_group,
+								database_name AS [Database Name],
+                                N'No Indexes Use Includes' AS finding, 'https://www.brentozar.com/go/IndexFeatures' AS URL,
+                                N'No Indexes Use Includes' AS details,
+                                database_name + N' (Entire database)' AS index_definition, 
+                                N'' AS secret_columns, 
+                                N'N/A' AS index_usage_summary, 
+                                N'N/A' AS index_size_summary 
+						FROM #index_includes
+						WHERE number_indexes_with_includes = 0
 						OPTION    ( RECOMPILE );
 
-			----------------------------------------
-			--Workaholics: Check_id 80-89
-			----------------------------------------
+            RAISERROR(N'check_id 31: < 3 percent of indexes have includes', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+					SELECT  31 AS check_id,
+					        NULL AS index_sanity_id, 
+					        250 AS Priority,
+					        N'Feature-Phobic Indexes' AS findings_group,
+					        N'Few Indexes Use Includes' AS findings,
+					        database_name AS [Database Name],
+					        N'https://www.brentozar.com/go/IndexFeatures' AS URL,
+					        N'Only ' + CAST(percent_indexes_with_includes AS NVARCHAR(20)) + '% of indexes have includes' AS details, 
+					        N'Entire database' AS index_definition, 
+					        N'' AS secret_columns,
+					        N'N/A' AS index_usage_summary, 
+					        N'N/A' AS index_size_summary
+					FROM #index_includes
+					WHERE number_indexes_with_includes > 0 AND percent_indexes_with_includes <= 3
+					OPTION    ( RECOMPILE );
 
-			RAISERROR(N'check_id 80: Most scanned indexes (index_usage_stats)', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
+            RAISERROR(N'check_id 32: filtered indexes and indexed views', 0,1) WITH NOWAIT;
 
-			--Workaholics according to index_usage_stats
-			--This isn't perfect: it mentions the number of scans present in a plan
-			--A "scan" isn't necessarily a full scan, but hey, we gotta do the best with what we've got.
-			--in the case of things like indexed views, the operator might be in the plan but never executed
-			SELECT TOP 5 
-				80 AS check_id,
-				i.index_sanity_id AS index_sanity_id,
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+					SELECT  DISTINCT
+							32 AS check_id, 
+					        NULL AS index_sanity_id,
+					        250 AS Priority,
+					        N'Feature-Phobic Indexes' AS findings_group,
+					        N'No Filtered Indexes or Indexed Views' AS finding, 
+					        i.database_name AS [Database Name],
+					        N'https://www.brentozar.com/go/IndexFeatures' AS URL,
+					        N'These are NOT always needed-- but do you know when you would use them?' AS details,
+					        i.database_name + N' (Entire database)' AS index_definition, 
+					        N'' AS secret_columns,
+					        N'N/A' AS index_usage_summary, 
+					        N'N/A' AS index_size_summary 
+					FROM #IndexSanity i
+					WHERE i.database_name NOT IN (                
+							SELECT   database_name
+							FROM     #IndexSanity
+							WHERE    filter_definition <> '' )
+					AND i.database_name NOT IN (
+					       SELECT  database_name
+						   FROM    #IndexSanity
+						   WHERE   is_indexed_view = 1 )
+					OPTION    ( RECOMPILE );
+
+        RAISERROR(N'check_id 33: Potential filtered indexes based on column names.', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+					SELECT  33 AS check_id, 
+					        i.index_sanity_id AS index_sanity_id,
+					        250 AS Priority,
+					        N'Feature-Phobic Indexes' AS findings_group,
+					        N'Potential Filtered Index (Based on Column Name)' AS finding, 
+					        [database_name] AS [Database Name],
+					        N'https://www.brentozar.com/go/IndexFeatures' AS URL,
+					        N'A column name in this index suggests it might be a candidate for filtering (is%, %archive%, %active%, %flag%)' AS details,
+					        i.index_definition, 
+					        i.secret_columns,
+					        i.index_usage_summary, 
+					        sz.index_size_summary
+					FROM #IndexColumns ic 
+					JOIN #IndexSanity i ON ic.[object_id]=i.[object_id] 
+						AND ic.database_id =i.database_id
+						AND ic.schema_name = i.schema_name
+						AND ic.[index_id]=i.[index_id] 
+						AND i.[index_id] > 1 /* non-clustered index */
+					JOIN    #IndexSanitySize AS sz ON i.index_sanity_id = sz.index_sanity_id
+					WHERE (column_name LIKE 'is%'
+					    OR column_name LIKE '%archive%'
+					    OR column_name LIKE '%active%'
+					    OR column_name LIKE '%flag%')
+					OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 41: Hypothetical indexes ', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                    SELECT  41 AS check_id, 
+                            i.index_sanity_id,
+                            150 AS Priority,
+                            N'Self Loathing Indexes' AS findings_group,
+                            N'Hypothetical Index' AS finding,
+                            [database_name] AS [Database Name],
+                            N'https://www.brentozar.com/go/SelfLoathing' AS URL,
+                            N'Hypothetical Index: ' + db_schema_object_indexid AS details, 
+                            i.index_definition,
+                            i.secret_columns,
+                            N'' AS index_usage_summary, 
+                            N'' AS index_size_summary
+                    FROM    #IndexSanity AS i
+                    WHERE    is_hypothetical = 1 
+                    OPTION    ( RECOMPILE );
+
+
+            RAISERROR(N'check_id 42: Disabled indexes', 0,1) WITH NOWAIT;
+            --Note: disabled NC indexes will have O rows in #IndexSanitySize!
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                    SELECT  42 AS check_id, 
+                            index_sanity_id,
+                            150 AS Priority,
+                            N'Self Loathing Indexes' AS findings_group,
+                            N'Disabled Index' AS finding, 
+                            [database_name] AS [Database Name],
+                            N'https://www.brentozar.com/go/SelfLoathing' AS URL,
+                            N'Disabled Index:' + db_schema_object_indexid AS details, 
+                            i.index_definition,
+                            i.secret_columns,
+                            i.index_usage_summary,
+                            'DISABLED' AS index_size_summary
+                    FROM    #IndexSanity AS i
+                    WHERE    is_disabled = 1
+                    OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 49: Heaps with deletes', 0,1) WITH NOWAIT;
+            WITH    heaps_cte
+                      AS ( SELECT   [object_id],
+								    [database_id],
+								    [schema_name],
+                                    SUM(leaf_delete_count) AS leaf_delete_count
+                           FROM        #IndexPartitionSanity
+                           GROUP BY    [object_id],
+								       [database_id],
+								       [schema_name]
+                           HAVING    SUM(forwarded_fetch_count) < 1000 * @DaysUptime /* Only alert about indexes with no forwarded fetches - we already alerted about those in check_id 43 */
+                                    AND SUM(leaf_delete_count) > 0)
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  49 AS check_id, 
+                                i.index_sanity_id,
+                                200 AS Priority,
+                                N'Self Loathing Indexes' AS findings_group,
+                                N'Heaps with Deletes' AS finding, 
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/SelfLoathing' AS URL,
+                                CAST(h.leaf_delete_count AS NVARCHAR(256)) + N' deletes against heap:'
+                                + db_schema_object_indexid AS details, 
+                                i.index_definition, 
+                                i.secret_columns,
+                                i.index_usage_summary,
+                                sz.index_size_summary
+                        FROM    #IndexSanity i
+                        JOIN heaps_cte h ON i.[object_id] = h.[object_id] 
+							 AND i.[database_id] = h.[database_id]
+							 AND i.[schema_name] = h.[schema_name]
+                        JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
+                        WHERE    i.index_id = 0 
+                        AND sz.total_reserved_MB >= CASE WHEN NOT (@GetAllDatabases = 1 OR @Mode = 4) THEN @ThresholdMB ELSE sz.total_reserved_MB END
+                OPTION    ( RECOMPILE );
+
+         ----------------------------------------
+        --Abnormal Psychology : Check_id 60-79
+        ----------------------------------------
+            RAISERROR(N'check_id 60: XML indexes', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                    SELECT  60 AS check_id, 
+                            i.index_sanity_id,
+                            150 AS Priority,
+                            N'Abnormal Psychology' AS findings_group,
+                            N'XML Index' AS finding, 
+                            [database_name] AS [Database Name],
+                            N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
+                            i.db_schema_object_indexid AS details, 
+                            i.index_definition,
+                            i.secret_columns,
+                            N'' AS index_usage_summary,
+                            ISNULL(sz.index_size_summary,'') AS index_size_summary
+                    FROM    #IndexSanity AS i
+                    JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
+                    WHERE i.is_XML = 1 
+					OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 61: Columnstore indexes', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                    SELECT  61 AS check_id, 
+                            i.index_sanity_id,
+                            150 AS Priority,
+                            N'Abnormal Psychology' AS findings_group,
+                            CASE WHEN i.is_NC_columnstore=1
+                                THEN N'NC Columnstore Index' 
+                                ELSE N'Clustered Columnstore Index' 
+                                END AS finding, 
+                            [database_name] AS [Database Name],
+                            N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
+                            i.db_schema_object_indexid AS details, 
+                            i.index_definition,
+                            i.secret_columns,
+                            i.index_usage_summary,
+                            ISNULL(sz.index_size_summary,'') AS index_size_summary
+                    FROM    #IndexSanity AS i
+                    JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
+                    WHERE i.is_NC_columnstore = 1 OR i.is_CX_columnstore=1
+                    OPTION    ( RECOMPILE );
+
+
+            RAISERROR(N'check_id 62: Spatial indexes', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                    SELECT  62 AS check_id, 
+                            i.index_sanity_id,
+                            150 AS Priority,
+                            N'Abnormal Psychology' AS findings_group,
+                            N'Spatial Index' AS finding,
+                            [database_name] AS [Database Name], 
+                            N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
+                            i.db_schema_object_indexid AS details, 
+                            i.index_definition,
+                            i.secret_columns,
+                            i.index_usage_summary,
+                            ISNULL(sz.index_size_summary,'') AS index_size_summary
+                    FROM    #IndexSanity AS i
+                    JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
+                    WHERE i.is_spatial = 1 
+					OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 63: Compressed indexes', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                    SELECT  63 AS check_id, 
+                            i.index_sanity_id,
+                            150 AS Priority,
+                            N'Abnormal Psychology' AS findings_group,
+                            N'Compressed Index' AS finding,
+                            [database_name] AS [Database Name], 
+                            N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
+                            i.db_schema_object_indexid  + N'. COMPRESSION: ' + sz.data_compression_desc AS details, 
+                            i.index_definition,
+                            i.secret_columns,
+                            i.index_usage_summary,
+                            ISNULL(sz.index_size_summary,'') AS index_size_summary
+                    FROM    #IndexSanity AS i
+                    JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
+                    WHERE sz.data_compression_desc LIKE '%PAGE%' OR sz.data_compression_desc LIKE '%ROW%' 
+					OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 64: Partitioned', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                    SELECT  64 AS check_id, 
+                            i.index_sanity_id,
+                            150 AS Priority,
+                            N'Abnormal Psychology' AS findings_group,
+                            N'Partitioned Index' AS finding,
+                            [database_name] AS [Database Name], 
+                            N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
+                            i.db_schema_object_indexid AS details, 
+                            i.index_definition,
+                            i.secret_columns,
+                            i.index_usage_summary,
+                            ISNULL(sz.index_size_summary,'') AS index_size_summary
+                    FROM    #IndexSanity AS i
+                    JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
+                    WHERE i.partition_key_column_name IS NOT NULL 
+					OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 65: Non-Aligned Partitioned', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                    SELECT  65 AS check_id, 
+                            i.index_sanity_id,
+                            150 AS Priority,
+                            N'Abnormal Psychology' AS findings_group,
+                            N'Non-Aligned Index on a Partitioned Table' AS finding,
+                            i.[database_name] AS [Database Name], 
+                            N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
+                            i.db_schema_object_indexid AS details, 
+                            i.index_definition,
+                            i.secret_columns,
+                            i.index_usage_summary,
+                            ISNULL(sz.index_size_summary,'') AS index_size_summary
+                    FROM    #IndexSanity AS i
+                    JOIN #IndexSanity AS iParent ON
+                        i.[object_id]=iParent.[object_id]
+						AND i.database_id = iParent.database_id
+						AND i.schema_name = iParent.schema_name
+                        AND iParent.index_id IN (0,1) /* could be a partitioned heap or clustered table */
+                        AND iParent.partition_key_column_name IS NOT NULL /* parent is partitioned*/         
+                    JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
+                    WHERE i.partition_key_column_name IS NULL 
+                    OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 66: Recently created tables/indexes (1 week)', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                    SELECT  66 AS check_id, 
+                            i.index_sanity_id,
+                            200 AS Priority,
+                            N'Abnormal Psychology' AS findings_group,
+                            N'Recently Created Tables/Indexes (1 week)' AS finding,
+                            [database_name] AS [Database Name], 
+                            N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
+                            i.db_schema_object_indexid + N' was created on ' + 
+                                CONVERT(NVARCHAR(16),i.create_date,121) + 
+                                N'. Tables/indexes which are dropped/created regularly require special methods for index tuning.'
+                                     AS details, 
+                            i.index_definition,
+                            i.secret_columns,
+                            i.index_usage_summary,
+                            ISNULL(sz.index_size_summary,'') AS index_size_summary
+                    FROM    #IndexSanity AS i
+                    JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
+                    WHERE i.create_date >= DATEADD(dd,-7,GETDATE()) 
+                    OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 67: Recently modified tables/indexes (2 days)', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                    SELECT  67 AS check_id, 
+                            i.index_sanity_id,
+                            200 AS Priority,
+                            N'Abnormal Psychology' AS findings_group,
+                            N'Recently Modified Tables/Indexes (2 days)' AS finding,
+                            [database_name] AS [Database Name], 
+                            N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
+                            i.db_schema_object_indexid + N' was modified on ' + 
+                                CONVERT(NVARCHAR(16),i.modify_date,121) + 
+                                N'. A large amount of recently modified indexes may mean a lot of rebuilds are occurring each night.'
+                                     AS details, 
+                            i.index_definition,
+                            i.secret_columns,
+                            i.index_usage_summary,
+                            ISNULL(sz.index_size_summary,'') AS index_size_summary
+                    FROM    #IndexSanity AS i
+                    JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
+                    WHERE i.modify_date > DATEADD(dd,-2,GETDATE()) 
+                    AND /*Exclude recently created tables.*/
+                    i.create_date < DATEADD(dd,-7,GETDATE()) 
+                    OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 69: Column collation does not match database collation', 0,1) WITH NOWAIT;
+                WITH count_columns AS (
+                            SELECT [object_id],
+								   database_id,
+								   schema_name,
+                                   COUNT(*) AS column_count
+                            FROM #IndexColumns ic
+                            WHERE index_id IN (1,0) /*Heap or clustered only*/
+                            AND collation_name <> @collation
+                            GROUP BY [object_id],
+								     database_id,
+								     schema_name
+                            )
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  69 AS check_id, 
+                                i.index_sanity_id, 
+                                150 AS Priority,
+                                N'Abnormal Psychology' AS findings_group,
+                                N'Column Collation Does Not Match Database Collation' AS finding,
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
+                                i.db_schema_object_name 
+                                    + N' has ' + CAST(column_count AS NVARCHAR(20))
+                                    + N' column' + CASE WHEN column_count > 1 THEN 's' ELSE '' END
+                                    + N' with a different collation than the db collation of '
+                                    + @collation    AS details,
+                                i.index_definition,
+                                secret_columns, 
+                                ISNULL(i.index_usage_summary,''),
+                                ISNULL(ip.index_size_summary,'')
+                        FROM    #IndexSanity i
+                        JOIN    #IndexSanitySize ip ON i.index_sanity_id = ip.index_sanity_id
+                        JOIN    count_columns AS cc ON i.[object_id]=cc.[object_id]
+								AND cc.database_id = i.database_id
+								AND cc.schema_name = i.schema_name
+                        WHERE    i.index_id IN (1,0)
+                        ORDER BY i.db_schema_object_name DESC OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 70: Replicated columns', 0,1) WITH NOWAIT;
+                WITH count_columns AS (
+                            SELECT [object_id],
+								   database_id,
+								   schema_name,
+                                   COUNT(*) AS column_count,
+                                   SUM(CASE is_replicated WHEN 1 THEN 1 ELSE 0 END) AS replicated_column_count
+                            FROM #IndexColumns ic
+                            WHERE index_id IN (1,0) /*Heap or clustered only*/
+                            GROUP BY object_id,
+								     database_id,
+								     schema_name
+                            )
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                        SELECT  70 AS check_id, 
+                                i.index_sanity_id,
+                                200 AS Priority, 
+                                N'Abnormal Psychology' AS findings_group,
+                                N'Replicated Columns' AS finding,
+                                [database_name] AS [Database Name],
+                                N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
+                                i.db_schema_object_name 
+                                    + N' has ' + CAST(replicated_column_count AS NVARCHAR(20))
+                                    + N' out of ' + CAST(column_count AS NVARCHAR(20))
+                                    + N' column' + CASE WHEN column_count > 1 THEN 's' ELSE '' END
+                                    + N' in one or more publications.'
+                                        AS details,
+                                i.index_definition,
+                                secret_columns, 
+                                ISNULL(i.index_usage_summary,''),
+                                ISNULL(ip.index_size_summary,'')
+                        FROM    #IndexSanity i
+                        JOIN    #IndexSanitySize ip ON i.index_sanity_id = ip.index_sanity_id
+                        JOIN    count_columns AS cc ON i.[object_id]=cc.[object_id]
+								AND i.database_id = cc.database_id
+								AND i.schema_name = cc.schema_name
+                        WHERE    i.index_id IN (1,0)
+                            AND replicated_column_count > 0
+                        ORDER BY i.db_schema_object_name DESC 
+						OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 71: Cascading updates or cascading deletes.', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary, more_info )
+            SELECT  71 AS check_id, 
+                    NULL AS index_sanity_id,
+                    150 AS Priority,
+                    N'Abnormal Psychology' AS findings_group,
+                    N'Cascading Updates or Deletes' AS finding, 
+                    [database_name] AS [Database Name],
+                    N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
+                    N'Foreign Key ' + QUOTENAME(foreign_key_name) +
+                    N' on ' + QUOTENAME(parent_object_name)  + N'(' + LTRIM(parent_fk_columns) + N')'
+                        + N' referencing ' + QUOTENAME(referenced_object_name) + N'(' + LTRIM(referenced_fk_columns) + N')'
+                        + N' has settings:'
+                        + CASE [delete_referential_action_desc] WHEN N'NO_ACTION' THEN N'' ELSE N' ON DELETE ' +[delete_referential_action_desc] END
+                        + CASE [update_referential_action_desc] WHEN N'NO_ACTION' THEN N'' ELSE N' ON UPDATE ' + [update_referential_action_desc] END
+                            AS details, 
+                    [fk].[database_name] AS index_definition, 
+                    N'N/A' AS secret_columns,
+                    N'N/A' AS index_usage_summary,
+                    N'N/A' AS index_size_summary,
+                    (SELECT TOP 1 more_info FROM #IndexSanity i WHERE i.object_id=fk.parent_object_id AND i.database_id = fk.database_id AND i.schema_name = fk.schema_name)
+                        AS more_info
+            FROM #ForeignKeys fk
+            WHERE ([delete_referential_action_desc] <> N'NO_ACTION'
+            OR [update_referential_action_desc] <> N'NO_ACTION')
+			OPTION    ( RECOMPILE );
+
+            RAISERROR(N'check_id 72: Unindexed foreign keys.', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary, more_info )
+            SELECT  72 AS check_id, 
+                    NULL AS index_sanity_id,
+                    150 AS Priority,
+                    N'Abnormal Psychology' AS findings_group,
+                    N'Unindexed Foreign Keys' AS finding, 
+                    [database_name] AS [Database Name],
+                    N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
+                    N'Foreign Key ' + QUOTENAME(foreign_key_name) +
+                    N' on ' + QUOTENAME(parent_object_name)  + N''
+                        + N' referencing ' + QUOTENAME(referenced_object_name) + N''
+                        + N' does not appear to have a supporting index.' AS details, 
+                    N'N/A' AS index_definition, 
+                    N'N/A' AS secret_columns,
+                    N'N/A' AS index_usage_summary,
+                    N'N/A' AS index_size_summary,
+                    (SELECT TOP 1 more_info FROM #IndexSanity i WHERE i.object_id=fk.parent_object_id AND i.database_id = fk.database_id AND i.schema_name = fk.schema_name)
+                        AS more_info
+            FROM #UnindexedForeignKeys AS fk
+			OPTION    ( RECOMPILE );
+
+
+            RAISERROR(N'check_id 73: In-Memory OLTP', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+                    SELECT  73 AS check_id, 
+                            i.index_sanity_id,
+                            150 AS Priority,
+                            N'Abnormal Psychology' AS findings_group,
+                            N'In-Memory OLTP' AS finding,
+                            [database_name] AS [Database Name], 
+                            N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
+                            i.db_schema_object_indexid AS details, 
+                            i.index_definition,
+                            i.secret_columns,
+                            i.index_usage_summary,
+                            ISNULL(sz.index_size_summary,'') AS index_size_summary
+                    FROM    #IndexSanity AS i
+                    JOIN #IndexSanitySize sz ON i.index_sanity_id = sz.index_sanity_id
+                    WHERE i.is_in_memory_oltp = 1
+					OPTION    ( RECOMPILE );
+
+        RAISERROR(N'check_id 74: Identity column with unusual seed', 0,1) WITH NOWAIT;
+            INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                            secret_columns, index_usage_summary, index_size_summary )
+                    SELECT  74 AS check_id, 
+                            i.index_sanity_id, 
+                            200 AS Priority,
+                            N'Abnormal Psychology' AS findings_group,
+                            N'Identity Column Using a Negative Seed or Increment Other Than 1' AS finding,
+                            [database_name] AS [Database Name],
+                            N'https://www.brentozar.com/go/AbnormalPsychology' AS URL,
+                            i.db_schema_object_name + N'.' +  QUOTENAME(ic.column_name)
+                                + N' is an identity with type ' + ic.system_type_name 
+                                + N', last value of ' 
+                                    + ISNULL((CONVERT(NVARCHAR(256),CAST(ic.last_value AS DECIMAL(38,0)), 1)),N'NULL')
+                                + N', seed of '
+                                    + ISNULL((CONVERT(NVARCHAR(256),CAST(ic.seed_value AS DECIMAL(38,0)), 1)),N'NULL')
+                                + N', increment of ' + CAST(ic.increment_value AS NVARCHAR(256)) 
+                                + N', and range of ' +
+                                    CASE ic.system_type_name WHEN 'int' THEN N'+/- 2,147,483,647'
+                                        WHEN 'smallint' THEN N'+/- 32,768'
+                                        WHEN 'tinyint' THEN N'0 to 255'
+                                        ELSE 'unknown'
+                                    END
+                                    AS details,
+                            i.index_definition,
+                            secret_columns, 
+                            ISNULL(i.index_usage_summary,''),
+                            ISNULL(ip.index_size_summary,'')
+                    FROM    #IndexSanity i
+                    JOIN    #IndexColumns ic ON
+                        i.object_id=ic.object_id
+						AND i.database_id = ic.database_id
+						AND i.schema_name = ic.schema_name
+                        AND i.index_id IN (0,1) /* heaps and cx only */
+                        AND ic.is_identity=1
+                        AND ic.system_type_name IN ('tinyint', 'smallint', 'int')
+                    JOIN    #IndexSanitySize ip ON i.index_sanity_id = ip.index_sanity_id
+                    WHERE    i.index_id IN (1,0)
+                        AND (ic.seed_value < 0 OR ic.increment_value <> 1)
+                    ORDER BY finding, details DESC 
+					OPTION    ( RECOMPILE );
+
+        ----------------------------------------
+        --Workaholics: Check_id 80-89
+        ----------------------------------------
+
+        RAISERROR(N'check_id 80: Most scanned indexes (index_usage_stats)', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+
+        --Workaholics according to index_usage_stats
+        --This isn't perfect: it mentions the number of scans present in a plan
+        --A "scan" isn't necessarily a full scan, but hey, we gotta do the best with what we've got.
+        --in the case of things like indexed views, the operator might be in the plan but never executed
+        SELECT TOP 5 
+            80 AS check_id,
+            i.index_sanity_id AS index_sanity_id,
+            200 AS Priority,
+            N'Workaholics' AS findings_group,
+            N'Scan-a-lots (index-usage-stats)' AS finding,
+            [database_name] AS [Database Name],
+            N'https://www.brentozar.com/go/Workaholics' AS URL,
+            REPLACE(CONVERT( NVARCHAR(50),CAST(i.user_scans AS MONEY),1),'.00','')
+                + N' scans against ' + i.db_schema_object_indexid
+                + N'. Latest scan: ' + ISNULL(CAST(i.last_user_scan AS NVARCHAR(128)),'?') + N'. ' 
+                + N'ScanFactor=' + CAST(((i.user_scans * iss.total_reserved_MB)/1000000.) AS NVARCHAR(256)) AS details,
+            ISNULL(i.key_column_names_with_sort_order,'N/A') AS index_definition,
+            ISNULL(i.secret_columns,'') AS secret_columns,
+            i.index_usage_summary AS index_usage_summary,
+            iss.index_size_summary AS index_size_summary
+        FROM #IndexSanity i
+        JOIN #IndexSanitySize iss ON i.index_sanity_id=iss.index_sanity_id
+        WHERE ISNULL(i.user_scans,0) > 0
+        ORDER BY  i.user_scans * iss.total_reserved_MB DESC
+		OPTION    ( RECOMPILE );
+
+        RAISERROR(N'check_id 81: Top recent accesses (op stats)', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+        --Workaholics according to index_operational_stats
+        --This isn't perfect either: range_scan_count contains full scans, partial scans, even seeks in nested loop ops
+        --But this can help bubble up some most-accessed tables 
+        SELECT TOP 5 
+            81 AS check_id,
+            i.index_sanity_id AS index_sanity_id,
+            200 AS Priority,
+            N'Workaholics' AS findings_group,
+            N'Top Recent Accesses (index-op-stats)' AS finding,
+            [database_name] AS [Database Name],
+            N'https://www.brentozar.com/go/Workaholics' AS URL,
+            ISNULL(REPLACE(
+                    CONVERT(NVARCHAR(50),CAST((iss.total_range_scan_count + iss.total_singleton_lookup_count) AS MONEY),1),
+                    N'.00',N'') 
+                + N' uses of ' + i.db_schema_object_indexid + N'. '
+                + REPLACE(CONVERT(NVARCHAR(50), CAST(iss.total_range_scan_count AS MONEY),1),N'.00',N'') + N' scans or seeks. '
+                + REPLACE(CONVERT(NVARCHAR(50), CAST(iss.total_singleton_lookup_count AS MONEY), 1),N'.00',N'') + N' singleton lookups. '
+                + N'OpStatsFactor=' + CAST(((((iss.total_range_scan_count + iss.total_singleton_lookup_count) * iss.total_reserved_MB))/1000000.) AS VARCHAR(256)),'') AS details,
+            ISNULL(i.key_column_names_with_sort_order,'N/A') AS index_definition,
+            ISNULL(i.secret_columns,'') AS secret_columns,
+            i.index_usage_summary AS index_usage_summary,
+            iss.index_size_summary AS index_size_summary
+        FROM #IndexSanity i
+        JOIN #IndexSanitySize iss ON i.index_sanity_id=iss.index_sanity_id
+        WHERE (ISNULL(iss.total_range_scan_count,0)  > 0 OR ISNULL(iss.total_singleton_lookup_count,0) > 0)
+        ORDER BY ((iss.total_range_scan_count + iss.total_singleton_lookup_count) * iss.total_reserved_MB) DESC
+		OPTION    ( RECOMPILE );
+
+
+
+        RAISERROR(N'check_id 93: Statistics with filters', 0,1) WITH NOWAIT;
+                INSERT    #BlitzIndexResults ( check_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+		SELECT  93 AS check_id, 
 				200 AS Priority,
-				N'Workaholics' AS findings_group,
-				N'Scan-a-lots (index-usage-stats)' AS finding,
-				[database_name] AS [Database Name],
-				N'https://www.brentozar.com/go/Workaholics' AS URL,
-				REPLACE(CONVERT( NVARCHAR(50),CAST(i.user_scans AS MONEY),1),'.00','')
-					+ N' scans against ' + i.db_schema_object_indexid
-					+ N'. Latest scan: ' + ISNULL(CAST(i.last_user_scan AS NVARCHAR(128)),'?') + N'. ' 
-					+ N'ScanFactor=' + CAST(((i.user_scans * iss.total_reserved_MB)/1000000.) AS NVARCHAR(256)) AS details,
-				ISNULL(i.key_column_names_with_sort_order,'N/A') AS index_definition,
-				ISNULL(i.secret_columns,'') AS secret_columns,
-				i.index_usage_summary AS index_usage_summary,
-				iss.index_size_summary AS index_size_summary
-			FROM #IndexSanity i
-			JOIN #IndexSanitySize iss ON i.index_sanity_id=iss.index_sanity_id
-			WHERE ISNULL(i.user_scans,0) > 0
-			ORDER BY  i.user_scans * iss.total_reserved_MB DESC
-			OPTION    ( RECOMPILE );
+				'Functioning Statistaholics' AS findings_group,
+				'Filter Fixation',
+				s.database_name,
+				'https://www.brentozar.com/go/stats' AS URL,
+				'The statistic ' + QUOTENAME(s.statistics_name) +  ' is filtered on [' + s.filter_definition + ']. It could be part of a filtered index, or just a filtered statistic. This is purely informational.' AS details,
+				 QUOTENAME(database_name) + '.' + QUOTENAME(s.schema_name) + '.' + QUOTENAME(s.table_name) + '.' + QUOTENAME(s.index_name) + '.' + QUOTENAME(s.statistics_name) + '.' + QUOTENAME(s.column_names) AS index_definition,
+				'N/A' AS secret_columns,
+				'N/A' AS index_usage_summary,
+				'N/A' AS index_size_summary
+		FROM #Statistics AS s
+		WHERE s.has_filter = 1
+		OPTION    ( RECOMPILE );
 
-			RAISERROR(N'check_id 81: Top recent accesses (op stats)', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, index_sanity_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-			--Workaholics according to index_operational_stats
-			--This isn't perfect either: range_scan_count contains full scans, partial scans, even seeks in nested loop ops
-			--But this can help bubble up some most-accessed tables 
-			SELECT TOP 5 
-				81 AS check_id,
-				i.index_sanity_id AS index_sanity_id,
+
+		RAISERROR(N'check_id 100: Computed Columns that are not Persisted.', 0,1) WITH NOWAIT;
+        INSERT    #BlitzIndexResults ( check_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+		SELECT  100 AS check_id, 
 				200 AS Priority,
-				N'Workaholics' AS findings_group,
-				N'Top Recent Accesses (index-op-stats)' AS finding,
-				[database_name] AS [Database Name],
-				N'https://www.brentozar.com/go/Workaholics' AS URL,
-				ISNULL(REPLACE(
-						CONVERT(NVARCHAR(50),CAST((iss.total_range_scan_count + iss.total_singleton_lookup_count) AS MONEY),1),
-						N'.00',N'') 
-					+ N' uses of ' + i.db_schema_object_indexid + N'. '
-					+ REPLACE(CONVERT(NVARCHAR(50), CAST(iss.total_range_scan_count AS MONEY),1),N'.00',N'') + N' scans or seeks. '
-					+ REPLACE(CONVERT(NVARCHAR(50), CAST(iss.total_singleton_lookup_count AS MONEY), 1),N'.00',N'') + N' singleton lookups. '
-					+ N'OpStatsFactor=' + CAST(((((iss.total_range_scan_count + iss.total_singleton_lookup_count) * iss.total_reserved_MB))/1000000.) AS VARCHAR(256)),'') AS details,
-				ISNULL(i.key_column_names_with_sort_order,'N/A') AS index_definition,
-				ISNULL(i.secret_columns,'') AS secret_columns,
-				i.index_usage_summary AS index_usage_summary,
-				iss.index_size_summary AS index_size_summary
-			FROM #IndexSanity i
-			JOIN #IndexSanitySize iss ON i.index_sanity_id=iss.index_sanity_id
-			WHERE (ISNULL(iss.total_range_scan_count,0)  > 0 OR ISNULL(iss.total_singleton_lookup_count,0) > 0)
-			ORDER BY ((iss.total_range_scan_count + iss.total_singleton_lookup_count) * iss.total_reserved_MB) DESC
-			OPTION    ( RECOMPILE );
+				'Cold Calculators' AS findings_group,
+				'Definition Defeatists' AS finding,
+				cc.database_name,
+				'' AS URL,
+				'The computed column ' + QUOTENAME(cc.column_name) + ' on ' + QUOTENAME(cc.schema_name) + '.' + QUOTENAME(cc.table_name) + ' is not persisted, which means it will be calculated when a query runs.' + 
+				'You can change this with the following command, if the definition is deterministic: ALTER TABLE ' + QUOTENAME(cc.schema_name) + '.' + QUOTENAME(cc.table_name) + ' ALTER COLUMN ' + cc.column_name +
+				' ADD PERSISTED'  AS details,
+				cc.column_definition,
+				'N/A' AS secret_columns,
+				'N/A' AS index_usage_summary,
+				'N/A' AS index_size_summary
+		FROM #ComputedColumns AS cc
+		WHERE cc.is_persisted = 0
+		OPTION    ( RECOMPILE );
+
+		RAISERROR(N'check_id 110: Temporal Tables.', 0,1) WITH NOWAIT;
+        INSERT    #BlitzIndexResults ( check_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+
+				SELECT  110 AS check_id, 
+				200 AS Priority,
+				'Abnormal Psychology' AS findings_group,
+				'Temporal Tables',
+				t.database_name,
+				'' AS URL,
+				'The table ' + QUOTENAME(t.schema_name) + '.' + QUOTENAME(t.table_name) + ' is a temporal table, with rows versioned in ' 
+					+ QUOTENAME(t.history_schema_name) + '.' + QUOTENAME(t.history_table_name) + ' on History columns ' + QUOTENAME(t.start_column_name) + ' and ' + QUOTENAME(t.end_column_name) + '.'
+				 AS details,
+				'' AS index_definition,
+				'N/A' AS secret_columns,
+				'N/A' AS index_usage_summary,
+				'N/A' AS index_size_summary
+		FROM #TemporalTables AS t
+		OPTION    ( RECOMPILE );
+
+		RAISERROR(N'check_id 121: Optimized For Sequental Keys.', 0,1) WITH NOWAIT;
+        INSERT    #BlitzIndexResults ( check_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
+                                               secret_columns, index_usage_summary, index_size_summary )
+
+				SELECT  121 AS check_id, 
+				200 AS Priority,
+				'Medicated Indexes' AS findings_group,
+				'Optimized For Sequential Keys',
+				i.database_name,
+				'' AS URL,
+				'The table ' + QUOTENAME(i.schema_name) + '.' + QUOTENAME(i.object_name) + ' is optimized for sequential keys.' AS details,
+				'' AS index_definition,
+				'N/A' AS secret_columns,
+				'N/A' AS index_usage_summary,
+				'N/A' AS index_size_summary
+		FROM #IndexSanity AS i
+		WHERE i.optimize_for_sequential_key = 1
+		OPTION    ( RECOMPILE );
 
 
 
-			RAISERROR(N'check_id 93: Statistics with filters', 0,1) WITH NOWAIT;
-					INSERT    #BlitzIndexResults ( check_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-			SELECT  93 AS check_id, 
-					200 AS Priority,
-					'Functioning Statistaholics' AS findings_group,
-					'Filter Fixation',
-					s.database_name,
-					'https://www.brentozar.com/go/stats' AS URL,
-					'The statistic ' + QUOTENAME(s.statistics_name) +  ' is filtered on [' + s.filter_definition + ']. It could be part of a filtered index, or just a filtered statistic. This is purely informational.' AS details,
-					 QUOTENAME(database_name) + '.' + QUOTENAME(s.schema_name) + '.' + QUOTENAME(s.table_name) + '.' + QUOTENAME(s.index_name) + '.' + QUOTENAME(s.statistics_name) + '.' + QUOTENAME(s.column_names) AS index_definition,
-					'N/A' AS secret_columns,
-					'N/A' AS index_usage_summary,
-					'N/A' AS index_size_summary
-			FROM #Statistics AS s
-			WHERE s.has_filter = 1
-			OPTION    ( RECOMPILE );
-
-
-			RAISERROR(N'check_id 100: Computed Columns that are not Persisted.', 0,1) WITH NOWAIT;
-			INSERT    #BlitzIndexResults ( check_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-			SELECT  100 AS check_id, 
-					200 AS Priority,
-					'Cold Calculators' AS findings_group,
-					'Definition Defeatists' AS finding,
-					cc.database_name,
-					'' AS URL,
-					'The computed column ' + QUOTENAME(cc.column_name) + ' on ' + QUOTENAME(cc.schema_name) + '.' + QUOTENAME(cc.table_name) + ' is not persisted, which means it will be calculated when a query runs.' + 
-					'You can change this with the following command, if the definition is deterministic: ALTER TABLE ' + QUOTENAME(cc.schema_name) + '.' + QUOTENAME(cc.table_name) + ' ALTER COLUMN ' + cc.column_name +
-					' ADD PERSISTED'  AS details,
-					cc.column_definition,
-					'N/A' AS secret_columns,
-					'N/A' AS index_usage_summary,
-					'N/A' AS index_size_summary
-			FROM #ComputedColumns AS cc
-			WHERE cc.is_persisted = 0
-			OPTION    ( RECOMPILE );
-
-			RAISERROR(N'check_id 110: Temporal Tables.', 0,1) WITH NOWAIT;
-			INSERT    #BlitzIndexResults ( check_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-
-					SELECT  110 AS check_id, 
-					200 AS Priority,
-					'Abnormal Psychology' AS findings_group,
-					'Temporal Tables',
-					t.database_name,
-					'' AS URL,
-					'The table ' + QUOTENAME(t.schema_name) + '.' + QUOTENAME(t.table_name) + ' is a temporal table, with rows versioned in ' 
-						+ QUOTENAME(t.history_schema_name) + '.' + QUOTENAME(t.history_table_name) + ' on History columns ' + QUOTENAME(t.start_column_name) + ' and ' + QUOTENAME(t.end_column_name) + '.'
-					 AS details,
-					'' AS index_definition,
-					'N/A' AS secret_columns,
-					'N/A' AS index_usage_summary,
-					'N/A' AS index_size_summary
-			FROM #TemporalTables AS t
-			OPTION    ( RECOMPILE );
-
-			RAISERROR(N'check_id 121: Optimized For Sequental Keys.', 0,1) WITH NOWAIT;
-			INSERT    #BlitzIndexResults ( check_id, Priority, findings_group, finding, [database_name], URL, details, index_definition,
-												   secret_columns, index_usage_summary, index_size_summary )
-
-					SELECT  121 AS check_id, 
-					200 AS Priority,
-					'Medicated Indexes' AS findings_group,
-					'Optimized For Sequential Keys',
-					i.database_name,
-					'' AS URL,
-					'The table ' + QUOTENAME(i.schema_name) + '.' + QUOTENAME(i.object_name) + ' is optimized for sequential keys.' AS details,
-					'' AS index_definition,
-					'N/A' AS secret_columns,
-					'N/A' AS index_usage_summary,
-					'N/A' AS index_size_summary
-			FROM #IndexSanity AS i
-			WHERE i.optimize_for_sequential_key = 1
-			OPTION    ( RECOMPILE );
-
-
-
-		END /* IF @Mode = 4 */
+	END /* IF @Mode = 4 */
 
 
 
@@ -4912,102 +4912,102 @@ BEGIN
 
 
  
-			RAISERROR(N'Insert a row to help people find help', 0,1) WITH NOWAIT;
-			IF DATEDIFF(MM, @VersionDate, GETDATE()) > 6
-			BEGIN
-				INSERT    #BlitzIndexResults ( Priority, check_id, findings_group, finding, URL, details, index_definition,
-												index_usage_summary, index_size_summary )
-				VALUES  ( -1, 0 , 
-					   'Outdated sp_BlitzIndex', 'sp_BlitzIndex is Over 6 Months Old', 'http://FirstResponderKit.org/', 
-					   'Fine wine gets better with age, but this ' + @ScriptVersionName + ' is more like bad cheese. Time to get a new one.',
-						@DaysUptimeInsertValue,N'',N''
-						);
-			END;
+        RAISERROR(N'Insert a row to help people find help', 0,1) WITH NOWAIT;
+        IF DATEDIFF(MM, @VersionDate, GETDATE()) > 6
+		BEGIN
+            INSERT    #BlitzIndexResults ( Priority, check_id, findings_group, finding, URL, details, index_definition,
+                                            index_usage_summary, index_size_summary )
+            VALUES  ( -1, 0 , 
+		           'Outdated sp_BlitzIndex', 'sp_BlitzIndex is Over 6 Months Old', 'http://FirstResponderKit.org/', 
+                   'Fine wine gets better with age, but this ' + @ScriptVersionName + ' is more like bad cheese. Time to get a new one.',
+                    @DaysUptimeInsertValue,N'',N''
+                    );
+        END;
 
-			IF EXISTS(SELECT * FROM #BlitzIndexResults)
-			BEGIN
-				INSERT    #BlitzIndexResults ( Priority, check_id, findings_group, finding, URL, details, index_definition,
-												index_usage_summary, index_size_summary )
-				VALUES  ( -1, 0 , 
-						@ScriptVersionName,
-						CASE WHEN @GetAllDatabases = 1 THEN N'All Databases' ELSE N'Database ' + QUOTENAME(@DatabaseName) + N' as of ' + CONVERT(NVARCHAR(16),GETDATE(),121) END, 
-						N'From Your Community Volunteers' ,   N'http://FirstResponderKit.org' ,
-						@DaysUptimeInsertValue,N'',N''
-						);
-			END;
-			ELSE IF @Mode = 0 OR (@GetAllDatabases = 1 AND @Mode <> 4)
-			BEGIN
-				INSERT    #BlitzIndexResults ( Priority, check_id, findings_group, finding, URL, details, index_definition,
-												index_usage_summary, index_size_summary )
-				VALUES  ( -1, 0 , 
-						@ScriptVersionName,
-						CASE WHEN @GetAllDatabases = 1 THEN N'All Databases' ELSE N'Database ' + QUOTENAME(@DatabaseName) + N' as of ' + CONVERT(NVARCHAR(16),GETDATE(),121) END, 
-						N'From Your Community Volunteers' ,   N'http://FirstResponderKit.org' ,
-						@DaysUptimeInsertValue, N'',N''
-						);
-				INSERT    #BlitzIndexResults ( Priority, check_id, findings_group, finding, URL, details, index_definition,
-												index_usage_summary, index_size_summary )
-				VALUES  ( 1, 0 , 
-					   N'No Major Problems Found',
-					   N'Nice Work!',
-					   N'http://FirstResponderKit.org', 
-					   N'Consider running with @Mode = 4 in individual databases (not all) for more detailed diagnostics.', 
-					   N'The default Mode 0 only looks for very serious index issues.', 
-					   @DaysUptimeInsertValue, N''
-						);
+        IF EXISTS(SELECT * FROM #BlitzIndexResults)
+		BEGIN
+            INSERT    #BlitzIndexResults ( Priority, check_id, findings_group, finding, URL, details, index_definition,
+                                            index_usage_summary, index_size_summary )
+            VALUES  ( -1, 0 , 
+		            @ScriptVersionName,
+                    CASE WHEN @GetAllDatabases = 1 THEN N'All Databases' ELSE N'Database ' + QUOTENAME(@DatabaseName) + N' as of ' + CONVERT(NVARCHAR(16),GETDATE(),121) END, 
+                    N'From Your Community Volunteers' ,   N'http://FirstResponderKit.org' ,
+                    @DaysUptimeInsertValue,N'',N''
+                    );
+        END;
+        ELSE IF @Mode = 0 OR (@GetAllDatabases = 1 AND @Mode <> 4)
+        BEGIN
+            INSERT    #BlitzIndexResults ( Priority, check_id, findings_group, finding, URL, details, index_definition,
+                                            index_usage_summary, index_size_summary )
+            VALUES  ( -1, 0 , 
+		            @ScriptVersionName,
+                    CASE WHEN @GetAllDatabases = 1 THEN N'All Databases' ELSE N'Database ' + QUOTENAME(@DatabaseName) + N' as of ' + CONVERT(NVARCHAR(16),GETDATE(),121) END, 
+                    N'From Your Community Volunteers' ,   N'http://FirstResponderKit.org' ,
+                    @DaysUptimeInsertValue, N'',N''
+                    );
+            INSERT    #BlitzIndexResults ( Priority, check_id, findings_group, finding, URL, details, index_definition,
+                                            index_usage_summary, index_size_summary )
+            VALUES  ( 1, 0 , 
+		           N'No Major Problems Found',
+                   N'Nice Work!',
+                   N'http://FirstResponderKit.org', 
+                   N'Consider running with @Mode = 4 in individual databases (not all) for more detailed diagnostics.', 
+                   N'The default Mode 0 only looks for very serious index issues.', 
+                   @DaysUptimeInsertValue, N''
+                    );
 
-			END;
-			ELSE
-			BEGIN
-				INSERT    #BlitzIndexResults ( Priority, check_id, findings_group, finding, URL, details, index_definition,
-												index_usage_summary, index_size_summary )
-				VALUES  ( -1, 0 , 
-						@ScriptVersionName,
-						CASE WHEN @GetAllDatabases = 1 THEN N'All Databases' ELSE N'Database ' + QUOTENAME(@DatabaseName) + N' as of ' + CONVERT(NVARCHAR(16),GETDATE(),121) END, 
-						N'From Your Community Volunteers' ,   N'http://FirstResponderKit.org' ,
-						@DaysUptimeInsertValue, N'',N''
-						);
-				INSERT    #BlitzIndexResults ( Priority, check_id, findings_group, finding, URL, details, index_definition,
-												index_usage_summary, index_size_summary )
-				VALUES  ( 1, 0 , 
-					   N'No Problems Found',
-					   N'Nice job! Or more likely, you have a nearly empty database.',
-					   N'http://FirstResponderKit.org', 'Time to go read some blog posts.', 
-					   @DaysUptimeInsertValue, N'', N''
-						);
+        END;
+        ELSE
+        BEGIN
+            INSERT    #BlitzIndexResults ( Priority, check_id, findings_group, finding, URL, details, index_definition,
+                                            index_usage_summary, index_size_summary )
+            VALUES  ( -1, 0 , 
+		            @ScriptVersionName,
+                    CASE WHEN @GetAllDatabases = 1 THEN N'All Databases' ELSE N'Database ' + QUOTENAME(@DatabaseName) + N' as of ' + CONVERT(NVARCHAR(16),GETDATE(),121) END, 
+                    N'From Your Community Volunteers' ,   N'http://FirstResponderKit.org' ,
+                    @DaysUptimeInsertValue, N'',N''
+                    );
+            INSERT    #BlitzIndexResults ( Priority, check_id, findings_group, finding, URL, details, index_definition,
+                                            index_usage_summary, index_size_summary )
+            VALUES  ( 1, 0 , 
+		           N'No Problems Found',
+                   N'Nice job! Or more likely, you have a nearly empty database.',
+                   N'http://FirstResponderKit.org', 'Time to go read some blog posts.', 
+                   @DaysUptimeInsertValue, N'', N''
+                    );
 
-			END;
+        END;
 
-			RAISERROR(N'Returning results.', 0,1) WITH NOWAIT;
+        RAISERROR(N'Returning results.', 0,1) WITH NOWAIT;
             
-			/*Return results.*/
-			IF (@Mode in (0, 4))
+        /*Return results.*/
+        IF (@Mode in (0, 4))
+        BEGIN
+			IF(@OutputType <> 'NONE')
 			BEGIN
-				IF(@OutputType <> 'NONE')
-				BEGIN
-					SELECT Priority, ISNULL(br.findings_group,N'') + 
-							CASE WHEN ISNULL(br.finding,N'') <> N'' THEN N': ' ELSE N'' END
-							+ br.finding AS [Finding], 
-						br.[database_name] AS [Database Name],
-						br.details AS [Details: schema.table.index(indexid)], 
-						br.index_definition AS [Definition: [Property]] ColumnName {datatype maxbytes}], 
-						ISNULL(br.secret_columns,'') AS [Secret Columns],          
-						br.index_usage_summary AS [Usage], 
-						br.index_size_summary AS [Size],
-						COALESCE(br.more_info,sn.more_info,'') AS [More Info],
-						br.URL, 
-						COALESCE(br.create_tsql,ts.create_tsql,'') AS [Create TSQL],
-						br.sample_query_plan AS [Sample Query Plan]
-					FROM #BlitzIndexResults br
-					LEFT JOIN #IndexSanity sn ON 
-						br.index_sanity_id=sn.index_sanity_id
-					LEFT JOIN #IndexCreateTsql ts ON 
-						br.index_sanity_id=ts.index_sanity_id
-					ORDER BY br.Priority ASC, br.check_id ASC, br.blitz_result_id ASC, br.findings_group ASC
-					OPTION (RECOMPILE);
-				 END;
+				SELECT Priority, ISNULL(br.findings_group,N'') + 
+						CASE WHEN ISNULL(br.finding,N'') <> N'' THEN N': ' ELSE N'' END
+						+ br.finding AS [Finding], 
+					br.[database_name] AS [Database Name],
+					br.details AS [Details: schema.table.index(indexid)], 
+					br.index_definition AS [Definition: [Property]] ColumnName {datatype maxbytes}], 
+					ISNULL(br.secret_columns,'') AS [Secret Columns],          
+					br.index_usage_summary AS [Usage], 
+					br.index_size_summary AS [Size],
+					COALESCE(br.more_info,sn.more_info,'') AS [More Info],
+					br.URL, 
+					COALESCE(br.create_tsql,ts.create_tsql,'') AS [Create TSQL],
+                    br.sample_query_plan AS [Sample Query Plan]
+				FROM #BlitzIndexResults br
+				LEFT JOIN #IndexSanity sn ON 
+					br.index_sanity_id=sn.index_sanity_id
+				LEFT JOIN #IndexCreateTsql ts ON 
+					br.index_sanity_id=ts.index_sanity_id
+				ORDER BY br.Priority ASC, br.check_id ASC, br.blitz_result_id ASC, br.findings_group ASC
+				OPTION (RECOMPILE);
+			 END;
 
-			END;
+        END;
 
 	END /* End @Mode=0 or 4 (diagnose)*/
 
