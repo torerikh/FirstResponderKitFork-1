@@ -5230,8 +5230,190 @@ BEGIN
 	ELSE IF (@Mode=1) /*Summarize*/
     BEGIN
     --This mode is to give some overall stats on the database.
-	 	IF(@OutputType <> 'NONE')
-	 	BEGIN
+		IF (@ValidOutputLocation = 1 AND COALESCE(@OutputServerName, @OutputDatabaseName, @OutputSchemaName, @OutputTableName) IS NOT NULL)
+			BEGIN
+
+				IF NOT @SchemaExists = 1
+					BEGIN
+						RAISERROR (N'Invalid schema name, data could not be saved.', 16, 0);
+						RETURN;
+					END
+
+				IF @TableExists = 0
+					BEGIN
+						SET @StringToExecute = 
+							N'CREATE TABLE @@@OutputDatabaseName@@@.@@@OutputSchemaName@@@.@@@OutputTableName@@@ 
+								(
+									[id] INT IDENTITY(1,1) NOT NULL, 
+									[run_id] UNIQUEIDENTIFIER,
+									[run_datetime] DATETIME, 
+									[server_name] NVARCHAR(128), 
+									[database_name] NVARCHAR(128),
+									[object_count] INT,
+									[reserved_gb] NUMERIC(29,1),
+									[reserved_lob_gb] NUMERIC(29,1),
+									[reserved_row_overflow_gb],
+									[clustered_table_count] INT,
+									[clustered_table_gb] NUMERIC(29,1),
+									[nc_index_count] INT,
+									[nc_index_gb] NUMERIC(29,1),
+									[table_nc_index_ratio] NUMERIC(29,1),
+									[heap_count] INT,
+									[heap_gb] NUMERIC(29,1),
+									[partioned_table_count] INT,
+									[partioned_nc_count] INT,
+									[partioned_gb] NUMERIC(29,1),
+									[filtered_index_count] INT,
+									[indexed_view_count] INT,
+									[max_table_row_count] INT
+									[max_table_gb] NUMERIC(29,1),
+									[max_nc_index_gb] NUMERIC(29,1),
+									[table_count_over_1gb] INT,
+									[table_count_over_10gb] INT,
+									[table_count_over_100gb] INT,    
+									[nc_index_count_over_1gb] INT,
+									[nc_index_count_over_10gb] INT,
+									[nc_index_count_over_100gb] INT,
+									[min_create_date] DATETIME,
+									[max_create_date] DATETIME,
+									[max_modify_date] DATETIME,
+									[display_order] INT,
+									CONSTRAINT [PK_ID_@@@RunID@@@] PRIMARY KEY CLUSTERED ([id] ASC)
+								);';
+		
+						SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputDatabaseName@@@', @OutputDatabaseName);
+						SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputSchemaName@@@', @OutputSchemaName); 
+						SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputTableName@@@', @OutputTableName); 
+						SET @StringToExecute = REPLACE(@StringToExecute, '@@@RunID@@@', @RunID); 
+								
+						IF @ValidOutputServer = 1
+							BEGIN
+								SET @StringToExecute = REPLACE(@StringToExecute,'''','''''');
+								EXEC('EXEC('''+@StringToExecute+''') AT ' + @OutputServerName);
+							END;   
+						ELSE
+							BEGIN
+								EXEC(@StringToExecute);
+							END;
+					END; /* @TableExists = 0 */
+
+					-- Re-check that table now exists (if not we failed creating it)	
+					SET @TableExists = NULL;
+					EXEC sp_executesql @TableExistsSql, N'@TableExists BIT OUTPUT', @TableExists OUTPUT;
+						
+					IF NOT @TableExists = 1
+						BEGIN
+							RAISERROR('Creation of the output table failed.', 16, 0);
+							RETURN;
+						END;
+
+					SET @StringToExecute = 
+						N'INSERT @@@OutputServerName@@@.@@@OutputDatabaseName@@@.@@@OutputSchemaName@@@.@@@OutputTableName@@@
+							(
+								[run_id], 
+								[run_datetime], 
+								[server_name], 
+								[database_name],
+								[object_count],
+								[reserved_gb],
+								[reserved_lob_gb],
+								[reserved_row_overflow_gb],
+								[clustered_table_count],
+								[clustered_table_gb]
+								[nc_index_count],
+								[nc_index_gb]
+								[table_nc_index_ratio]
+								[heap_count],
+								[heap_gb]
+								[partioned_table_count],
+								[partioned_nc_count],
+								[partioned_gb],
+								[filtered_index_count],
+								[indexed_view_count],
+								[max_table_row_count]
+								[max_table_gb],
+								[max_nc_index_gb],
+								[table_count_over_1gb],
+								[table_count_over_10gb],
+								[table_count_over_100gb],    
+								[nc_index_count_over_1gb],
+								[nc_index_count_over_10gb],
+								[nc_index_count_over_100gb],
+								[min_create_date],
+								[max_create_date],
+								[max_modify_date],
+								[display_order]
+							)
+						SELECT ''@@@RunID@@@'',
+							''@@@GETDATE@@@'',
+							''@@@LocalServerName@@@'',
+							-- Below should be a copy/paste of the real query
+							-- Make sure all quotes are escaped
+							-- NOTE! information line is skipped from output and the query below
+							SELECT DB_NAME(i.database_id) AS [Database Name],
+								COUNT(*) AS [Number Objects],
+								CAST(SUM(sz.total_reserved_MB)/
+									1024. AS NUMERIC(29,1)) AS [All GB],
+								CAST(SUM(sz.total_reserved_LOB_MB)/
+									1024. AS NUMERIC(29,1)) AS [LOB GB],
+								CAST(SUM(sz.total_reserved_row_overflow_MB)/
+									1024. AS NUMERIC(29,1)) AS [Row Overflow GB],
+								SUM(CASE WHEN index_id=1 THEN 1 ELSE 0 END) AS [Clustered Tables],
+								CAST(SUM(CASE WHEN index_id=1 THEN sz.total_reserved_MB ELSE 0 END)
+									/1024. AS NUMERIC(29,1)) AS [Clustered Tables GB],
+								SUM(CASE WHEN index_id NOT IN (0,1) THEN 1 ELSE 0 END) AS [NC Indexes],
+								CAST(SUM(CASE WHEN index_id NOT IN (0,1) THEN sz.total_reserved_MB ELSE 0 END)
+									/1024. AS NUMERIC(29,1)) AS [NC Indexes GB],
+								CASE WHEN SUM(CASE WHEN index_id NOT IN (0,1) THEN sz.total_reserved_MB ELSE 0 END)  > 0 THEN
+									CAST(SUM(CASE WHEN index_id IN (0,1) THEN sz.total_reserved_MB ELSE 0 END)
+										/ SUM(CASE WHEN index_id NOT IN (0,1) THEN sz.total_reserved_MB ELSE 0 END) AS NUMERIC(29,1)) 
+									ELSE 0 END AS [ratio table: NC Indexes],
+								SUM(CASE WHEN index_id=0 THEN 1 ELSE 0 END) AS [Heaps],
+								CAST(SUM(CASE WHEN index_id=0 THEN sz.total_reserved_MB ELSE 0 END)
+									/1024. AS NUMERIC(29,1)) AS [Heaps GB],
+								SUM(CASE WHEN index_id IN (0,1) AND partition_key_column_name IS NOT NULL THEN 1 ELSE 0 END) AS [Partitioned Tables],
+								SUM(CASE WHEN index_id NOT IN (0,1) AND  partition_key_column_name IS NOT NULL THEN 1 ELSE 0 END) AS [Partitioned NCs],
+								CAST(SUM(CASE WHEN partition_key_column_name IS NOT NULL THEN sz.total_reserved_MB ELSE 0 END)/1024. AS NUMERIC(29,1)) AS [Partitioned GB],
+								SUM(CASE WHEN filter_definition <> '''' THEN 1 ELSE 0 END) AS [Filtered Indexes],
+								SUM(CASE WHEN is_indexed_view=1 THEN 1 ELSE 0 END) AS [Indexed Views],
+								MAX(total_rows) AS [Max Row Count],
+								CAST(MAX(CASE WHEN index_id IN (0,1) THEN sz.total_reserved_MB ELSE 0 END)
+									/1024. AS NUMERIC(29,1)) AS [Max Table GB],
+								CAST(MAX(CASE WHEN index_id NOT IN (0,1) THEN sz.total_reserved_MB ELSE 0 END)
+									/1024. AS NUMERIC(29,1)) AS [Max NC Index GB],
+								SUM(CASE WHEN index_id IN (0,1) AND sz.total_reserved_MB > 1024 THEN 1 ELSE 0 END) AS [Count Tables > 1GB],
+								SUM(CASE WHEN index_id IN (0,1) AND sz.total_reserved_MB > 10240 THEN 1 ELSE 0 END) AS [Count Tables > 10GB],
+								SUM(CASE WHEN index_id IN (0,1) AND sz.total_reserved_MB > 102400 THEN 1 ELSE 0 END) AS [Count Tables > 100GB],    
+								SUM(CASE WHEN index_id NOT IN (0,1) AND sz.total_reserved_MB > 1024 THEN 1 ELSE 0 END) AS [Count NCs > 1GB],
+								SUM(CASE WHEN index_id NOT IN (0,1) AND sz.total_reserved_MB > 10240 THEN 1 ELSE 0 END) AS [Count NCs > 10GB],
+								SUM(CASE WHEN index_id NOT IN (0,1) AND sz.total_reserved_MB > 102400 THEN 1 ELSE 0 END) AS [Count NCs > 100GB],
+								MIN(create_date) AS [Oldest Create Date],
+								MAX(create_date) AS [Most Recent Create Date],
+								MAX(modify_date) AS [Most Recent Modify Date],
+								1 AS [Display Order]
+							FROM #IndexSanity AS i
+							--left join here so we don''t lose disabled nc indexes
+							LEFT JOIN #IndexSanitySize AS sz 
+								ON i.index_sanity_id=sz.index_sanity_id
+							GROUP BY DB_NAME(i.database_id)
+							ORDER BY [Display Order] ASC
+							OPTION (RECOMPILE);';
+	
+					SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputServerName@@@', @OutputServerName);
+					SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputDatabaseName@@@', @OutputDatabaseName);
+					SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputSchemaName@@@', @OutputSchemaName); 
+					SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputTableName@@@', @OutputTableName); 
+					SET @StringToExecute = REPLACE(@StringToExecute, '@@@RunID@@@', @RunID);
+					SET @StringToExecute = REPLACE(@StringToExecute, '@@@GETDATE@@@', GETDATE());
+					SET @StringToExecute = REPLACE(@StringToExecute, '@@@LocalServerName@@@', CAST(SERVERPROPERTY('ServerName') AS NVARCHAR(128)));
+					EXEC(@StringToExecute);
+
+			END; /* @ValidOutputLocation = 1 */
+		ELSE
+			BEGIN
+				IF(@OutputType <> 'NONE')
+				BEGIN
+
 			RAISERROR(N'@Mode=1, we are summarizing.', 0,1) WITH NOWAIT;
 
 			SELECT DB_NAME(i.database_id) AS [Database Name],
@@ -5291,8 +5473,9 @@ BEGIN
 					NULL,NULL,0 AS display_order
 			ORDER BY [Display Order] ASC
 			OPTION (RECOMPILE);
-	  	END;
-           
+  			END;
+		END;
+
     END; /* End @Mode=1 (summarize)*/
 
 
