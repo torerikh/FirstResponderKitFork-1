@@ -3973,23 +3973,6 @@ BEGIN
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     IF @Mode = 4 /* DIAGNOSE*/
     BEGIN;
         RAISERROR(N'@Mode=4, running rules for priorities 101+.', 0,1) WITH NOWAIT;
@@ -5022,27 +5005,7 @@ BEGIN
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
- 
+	   	   
         RAISERROR(N'Insert a row to help people find help', 0,1) WITH NOWAIT;
         IF DATEDIFF(MM, @VersionDate, GETDATE()) > 6
 		BEGIN
@@ -5112,33 +5075,148 @@ BEGIN
         RAISERROR(N'Returning results.', 0,1) WITH NOWAIT;
             
         /*Return results.*/
-        IF (@Mode in (0, 4))
-        BEGIN
-			IF(@OutputType <> 'NONE')
+		IF (@ValidOutputLocation = 1 AND COALESCE(@OutputServerName, @OutputDatabaseName, @OutputSchemaName, @OutputTableName) IS NOT NULL)
 			BEGIN
-				SELECT Priority, ISNULL(br.findings_group,N'') + 
-						CASE WHEN ISNULL(br.finding,N'') <> N'' THEN N': ' ELSE N'' END
-						+ br.finding AS [Finding], 
-					br.[database_name] AS [Database Name],
-					br.details AS [Details: schema.table.index(indexid)], 
-					br.index_definition AS [Definition: [Property]] ColumnName {datatype maxbytes}], 
-					ISNULL(br.secret_columns,'') AS [Secret Columns],          
-					br.index_usage_summary AS [Usage], 
-					br.index_size_summary AS [Size],
-					COALESCE(br.more_info,sn.more_info,'') AS [More Info],
-					br.URL, 
-					COALESCE(br.create_tsql,ts.create_tsql,'') AS [Create TSQL],
-                    br.sample_query_plan AS [Sample Query Plan]
-				FROM #BlitzIndexResults br
-				LEFT JOIN #IndexSanity sn ON 
-					br.index_sanity_id=sn.index_sanity_id
-				LEFT JOIN #IndexCreateTsql ts ON 
-					br.index_sanity_id=ts.index_sanity_id
-				ORDER BY br.Priority ASC, br.check_id ASC, br.blitz_result_id ASC, br.findings_group ASC
-				OPTION (RECOMPILE);
-			 END;
+				IF NOT @SchemaExists = 1
+					BEGIN
+						RAISERROR (N'Invalid schema name, data could not be saved.', 16, 0);
+						RETURN;
+					END
 
-        END;
+				IF @TableExists = 0
+					BEGIN
+						SET @StringToExecute = 
+							N'CREATE TABLE @@@OutputDatabaseName@@@.@@@OutputSchemaName@@@.@@@OutputTableName@@@ 
+								(
+									[id] INT IDENTITY(1,1) NOT NULL, 
+									[run_id] UNIQUEIDENTIFIER,
+									[run_datetime] DATETIME, 
+									[server_name] NVARCHAR(128), 
+
+									[priority] INT NULL,
+									[finding] NVARCHAR(4000) NOT NULL,
+									[database_name] NVARCHAR(128) NULL,
+									[details] NVARCHAR(MAX) NOT NULL,
+									[index_definition] NVARCHAR(MAX) NOT NULL,
+									[secret_columns] NVARCHAR(MAX) NOT NULL,
+									[index_usage_summary] NVARCHAR(MAX) NULL,
+									[index_size_summary] NVARCHAR(MAX) NULL,
+									[more_info] NVARCHAR(MAX) NULL,
+									[url] NVARCHAR(MAX) NOT NULL,
+									[create_tsql] NVARCHAR(MAX) NULL,
+									[sample_query_plan] XML NULL,
+									CONSTRAINT [PK_ID_@@@RunID@@@] PRIMARY KEY CLUSTERED ([id] ASC)
+								);';
+		
+						SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputDatabaseName@@@', @OutputDatabaseName);
+						SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputSchemaName@@@', @OutputSchemaName); 
+						SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputTableName@@@', @OutputTableName); 
+						SET @StringToExecute = REPLACE(@StringToExecute, '@@@RunID@@@', @RunID); 
+								
+						IF @ValidOutputServer = 1
+							BEGIN
+								SET @StringToExecute = REPLACE(@StringToExecute,'''','''''');
+								EXEC('EXEC('''+@StringToExecute+''') AT ' + @OutputServerName);
+							END;   
+						ELSE
+							BEGIN
+								EXEC(@StringToExecute);
+							END;
+					END; /* @TableExists = 0 */
+
+				-- Re-check that table now exists (if not we failed creating it)	
+				SET @TableExists = NULL;
+				EXEC sp_executesql @TableExistsSql, N'@TableExists BIT OUTPUT', @TableExists OUTPUT;
+						
+				IF NOT @TableExists = 1
+					BEGIN
+						RAISERROR('Creation of the output table failed.', 16, 0);
+						RETURN;
+					END;
+
+				SET @StringToExecute = 
+					N'INSERT @@@OutputServerName@@@.@@@OutputDatabaseName@@@.@@@OutputSchemaName@@@.@@@OutputTableName@@@
+						(
+							[run_id], 
+							[run_datetime], 
+							[server_name],
+							[priority],
+							[finding],
+							[database_name],
+							[details],
+							[index_definition],
+							[secret_columns],
+							[index_usage_summary],
+							[index_size_summary],
+							[more_info],
+							[url],
+							[create_tsql],
+							[sample_query_plan]
+						)
+					SELECT
+						''@@@RunID@@@'',
+						''@@@GETDATE@@@'',
+						''@@@LocalServerName@@@'',
+						-- Below should be a copy/paste of the real query
+						-- Make sure all quotes are escaped
+						SELECT Priority, ISNULL(br.findings_group,N'''') + 
+							CASE WHEN ISNULL(br.finding,N'''') <> N'''' THEN N'': '' ELSE N'''' END
+							+ br.finding AS [Finding], 
+						br.[database_name] AS [Database Name],
+						br.details AS [Details: schema.table.index(indexid)], 
+						br.index_definition AS [Definition: [Property]] ColumnName {datatype maxbytes}], 
+						ISNULL(br.secret_columns,'''') AS [Secret Columns],          
+						br.index_usage_summary AS [Usage], 
+						br.index_size_summary AS [Size],
+						COALESCE(br.more_info,sn.more_info,'''') AS [More Info],
+						br.URL, 
+						COALESCE(br.create_tsql,ts.create_tsql,'''') AS [Create TSQL],
+						br.sample_query_plan AS [Sample Query Plan]
+					FROM #BlitzIndexResults br
+					LEFT JOIN #IndexSanity sn ON 
+						br.index_sanity_id=sn.index_sanity_id
+					LEFT JOIN #IndexCreateTsql ts ON 
+						br.index_sanity_id=ts.index_sanity_id
+					ORDER BY br.Priority ASC, br.check_id ASC, br.blitz_result_id ASC, br.findings_group ASC
+					OPTION (RECOMPILE);';
+	
+				SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputServerName@@@', @OutputServerName);
+				SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputDatabaseName@@@', @OutputDatabaseName);
+				SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputSchemaName@@@', @OutputSchemaName); 
+				SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputTableName@@@', @OutputTableName); 
+				SET @StringToExecute = REPLACE(@StringToExecute, '@@@RunID@@@', @RunID);
+				SET @StringToExecute = REPLACE(@StringToExecute, '@@@GETDATE@@@', GETDATE());
+				SET @StringToExecute = REPLACE(@StringToExecute, '@@@LocalServerName@@@', CAST(SERVERPROPERTY('ServerName') AS NVARCHAR(128)));
+				EXEC(@StringToExecute);
+
+			END
+        ELSE
+			BEGIN
+				IF(@OutputType <> 'NONE')
+				BEGIN
+					SELECT Priority, ISNULL(br.findings_group,N'') + 
+							CASE WHEN ISNULL(br.finding,N'') <> N'' THEN N': ' ELSE N'' END
+							+ br.finding AS [Finding], 
+						br.[database_name] AS [Database Name],
+						br.details AS [Details: schema.table.index(indexid)], 
+						br.index_definition AS [Definition: [Property]] ColumnName {datatype maxbytes}], 
+						ISNULL(br.secret_columns,'') AS [Secret Columns],          
+						br.index_usage_summary AS [Usage], 
+						br.index_size_summary AS [Size],
+						COALESCE(br.more_info,sn.more_info,'') AS [More Info],
+						br.URL, 
+						COALESCE(br.create_tsql,ts.create_tsql,'') AS [Create TSQL],
+						br.sample_query_plan AS [Sample Query Plan]
+					FROM #BlitzIndexResults br
+					LEFT JOIN #IndexSanity sn ON 
+						br.index_sanity_id=sn.index_sanity_id
+					LEFT JOIN #IndexCreateTsql ts ON 
+						br.index_sanity_id=ts.index_sanity_id
+					ORDER BY br.Priority ASC, br.check_id ASC, br.blitz_result_id ASC, br.findings_group ASC
+					OPTION (RECOMPILE);
+				 END;
+
+			END;
 
 	END /* End @Mode=0 or 4 (diagnose)*/
 
