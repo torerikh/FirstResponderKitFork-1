@@ -5002,7 +5002,7 @@ BEGIN;
         RAISERROR(N'Returning results.', 0,1) WITH NOWAIT;
             
         /*Return results.*/
-        IF (@Mode = 0)
+        IF (@Mode in (0, 4))
         BEGIN
 			IF(@OutputType <> 'NONE')
 			BEGIN
@@ -5029,30 +5029,6 @@ BEGIN;
 			 END;
 
         END;
-        ELSE IF (@Mode = 4)
-			IF(@OutputType <> 'NONE')
-		 	BEGIN	
-				SELECT Priority, ISNULL(br.findings_group,N'') + 
-						CASE WHEN ISNULL(br.finding,N'') <> N'' THEN N': ' ELSE N'' END
-						+ br.finding AS [Finding], 
-					br.[database_name] AS [Database Name],
-					br.details AS [Details: schema.table.index(indexid)], 
-					br.index_definition AS [Definition: [Property]] ColumnName {datatype maxbytes}], 
-					ISNULL(br.secret_columns,'') AS [Secret Columns],          
-					br.index_usage_summary AS [Usage], 
-					br.index_size_summary AS [Size],
-					COALESCE(br.more_info,sn.more_info,'') AS [More Info],
-					br.URL, 
-					COALESCE(br.create_tsql,ts.create_tsql,'') AS [Create TSQL],
-                    br.sample_query_plan AS [Sample Query Plan]
-				FROM #BlitzIndexResults br
-				LEFT JOIN #IndexSanity sn ON 
-					br.index_sanity_id=sn.index_sanity_id
-				LEFT JOIN #IndexCreateTsql ts ON 
-					br.index_sanity_id=ts.index_sanity_id
-				ORDER BY br.Priority ASC, br.check_id ASC, br.blitz_result_id ASC, br.findings_group ASC
-				OPTION (RECOMPILE);
-			 END;
 
 END /* End @Mode=0 or 4 (diagnose)*/
 
