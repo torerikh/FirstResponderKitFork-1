@@ -3025,6 +3025,94 @@ END; /* IF @TableName IS NOT NULL */
 ELSE /* @TableName IS NULL, so we operate in normal mode 0/1/2/3/4 */
 BEGIN
 
+/* Validate and check table output params */
+
+
+		/* Checks if @OutputServerName is populated with a valid linked server, and that the database name specified is valid */
+		DECLARE @ValidOutputServer BIT;
+		DECLARE @ValidOutputLocation BIT;
+		DECLARE @LinkedServerDBCheck NVARCHAR(2000);
+		DECLARE @ValidLinkedServerDB INT;
+		DECLARE @tmpdbchk TABLE (cnt INT);
+		
+		IF @OutputServerName IS NOT NULL
+			BEGIN
+				IF (SUBSTRING(@OutputTableName, 2, 1) = '#')
+					BEGIN
+						RAISERROR('Due to the nature of temporary tables, outputting to a linked server requires a permanent table.', 16, 0);
+					END;
+				ELSE IF EXISTS (SELECT server_id FROM sys.servers WHERE QUOTENAME([name]) = @OutputServerName)
+					BEGIN
+						SET @LinkedServerDBCheck = 'SELECT 1 WHERE EXISTS (SELECT * FROM '+@OutputServerName+'.master.sys.databases WHERE QUOTENAME([name]) = '''+@OutputDatabaseName+''')';
+						INSERT INTO @tmpdbchk EXEC sys.sp_executesql @LinkedServerDBCheck;
+						SET @ValidLinkedServerDB = (SELECT COUNT(*) FROM @tmpdbchk);
+						IF (@ValidLinkedServerDB > 0)
+							BEGIN
+								SET @ValidOutputServer = 1;
+								SET @ValidOutputLocation = 1;
+							END;
+						ELSE
+							RAISERROR('The specified database was not found on the output server', 16, 0);
+					END;
+				ELSE
+					BEGIN
+						RAISERROR('The specified output server was not found', 16, 0);
+					END;
+			END;
+		ELSE
+			BEGIN
+				IF (SUBSTRING(@OutputTableName, 2, 2) = '##')
+					BEGIN
+						SET @StringToExecute = N' IF (OBJECT_ID(''[tempdb].[dbo].@@@OutputTableName@@@'') IS NOT NULL) DROP TABLE @@@OutputTableName@@@';
+						SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputTableName@@@', @OutputTableName); 
+						EXEC(@StringToExecute);
+						
+						SET @OutputServerName = QUOTENAME(CAST(SERVERPROPERTY('ServerName') AS NVARCHAR(128)));
+						SET @OutputDatabaseName = '[tempdb]';
+						SET @OutputSchemaName = '[dbo]';
+						SET @ValidOutputLocation = 1;
+					END;
+				ELSE IF (SUBSTRING(@OutputTableName, 2, 1) = '#')
+					BEGIN
+						RAISERROR('Due to the nature of Dymamic SQL, only global (i.e. double pound (##)) temp tables are supported for @OutputTableName', 16, 0);
+					END;
+				ELSE IF @OutputDatabaseName IS NOT NULL
+					AND @OutputSchemaName IS NOT NULL
+					AND @OutputTableName IS NOT NULL
+					AND EXISTS ( SELECT *
+						 FROM   sys.databases
+						 WHERE  QUOTENAME([name]) = @OutputDatabaseName)
+					BEGIN
+						SET @ValidOutputLocation = 1;
+						SET @OutputServerName = QUOTENAME(CAST(SERVERPROPERTY('ServerName') AS NVARCHAR(128)));
+					END;
+				ELSE IF @OutputDatabaseName IS NOT NULL
+					AND @OutputSchemaName IS NOT NULL
+					AND @OutputTableName IS NOT NULL
+					AND NOT EXISTS ( SELECT *
+						 FROM   sys.databases
+						 WHERE  QUOTENAME([name]) = @OutputDatabaseName)
+					BEGIN
+						RAISERROR('The specified output database was not found on this server', 16, 0);
+					END;
+				ELSE
+					BEGIN
+						SET @ValidOutputLocation = 0; 
+					END;
+			END;
+																										
+        IF (@ValidOutputLocation = 0 AND @OutputType = 'NONE')
+        BEGIN
+            RAISERROR('Invalid output location and no output asked',12,1);
+            RETURN;
+        END;
+																										
+		/* @OutputTableName lets us export the results to a permanent table */
+		DECLARE @RunID UNIQUEIDENTIFIER;
+		SET @RunID = NEWID();
+
+
+
 	IF @Mode IN (0, 4) /* DIAGNOSE */
 	BEGIN;
 	IF @Mode IN (0, 4) /* DIAGNOSE priorities 1-100 */
@@ -5099,90 +5187,6 @@ BEGIN
         --This supports slicing AND dicing in Excel
         RAISERROR(N'@Mode=2, here''s the details on existing indexes.', 0,1) WITH NOWAIT;
 
-		
-		/* Checks if @OutputServerName is populated with a valid linked server, and that the database name specified is valid */
-		DECLARE @ValidOutputServer BIT;
-		DECLARE @ValidOutputLocation BIT;
-		DECLARE @LinkedServerDBCheck NVARCHAR(2000);
-		DECLARE @ValidLinkedServerDB INT;
-		DECLARE @tmpdbchk TABLE (cnt INT);
-		
-		IF @OutputServerName IS NOT NULL
-			BEGIN
-				IF (SUBSTRING(@OutputTableName, 2, 1) = '#')
-					BEGIN
-						RAISERROR('Due to the nature of temporary tables, outputting to a linked server requires a permanent table.', 16, 0);
-					END;
-				ELSE IF EXISTS (SELECT server_id FROM sys.servers WHERE QUOTENAME([name]) = @OutputServerName)
-					BEGIN
-						SET @LinkedServerDBCheck = 'SELECT 1 WHERE EXISTS (SELECT * FROM '+@OutputServerName+'.master.sys.databases WHERE QUOTENAME([name]) = '''+@OutputDatabaseName+''')';
-						INSERT INTO @tmpdbchk EXEC sys.sp_executesql @LinkedServerDBCheck;
-						SET @ValidLinkedServerDB = (SELECT COUNT(*) FROM @tmpdbchk);
-						IF (@ValidLinkedServerDB > 0)
-							BEGIN
-								SET @ValidOutputServer = 1;
-								SET @ValidOutputLocation = 1;
-							END;
-						ELSE
-							RAISERROR('The specified database was not found on the output server', 16, 0);
-					END;
-				ELSE
-					BEGIN
-						RAISERROR('The specified output server was not found', 16, 0);
-					END;
-			END;
-		ELSE
-			BEGIN
-				IF (SUBSTRING(@OutputTableName, 2, 2) = '##')
-					BEGIN
-						SET @StringToExecute = N' IF (OBJECT_ID(''[tempdb].[dbo].@@@OutputTableName@@@'') IS NOT NULL) DROP TABLE @@@OutputTableName@@@';
-						SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputTableName@@@', @OutputTableName); 
-						EXEC(@StringToExecute);
-						
-						SET @OutputServerName = QUOTENAME(CAST(SERVERPROPERTY('ServerName') AS NVARCHAR(128)));
-						SET @OutputDatabaseName = '[tempdb]';
-						SET @OutputSchemaName = '[dbo]';
-						SET @ValidOutputLocation = 1;
-					END;
-				ELSE IF (SUBSTRING(@OutputTableName, 2, 1) = '#')
-					BEGIN
-						RAISERROR('Due to the nature of Dymamic SQL, only global (i.e. double pound (##)) temp tables are supported for @OutputTableName', 16, 0);
-					END;
-				ELSE IF @OutputDatabaseName IS NOT NULL
-					AND @OutputSchemaName IS NOT NULL
-					AND @OutputTableName IS NOT NULL
-					AND EXISTS ( SELECT *
-						 FROM   sys.databases
-						 WHERE  QUOTENAME([name]) = @OutputDatabaseName)
-					BEGIN
-						SET @ValidOutputLocation = 1;
-						SET @OutputServerName = QUOTENAME(CAST(SERVERPROPERTY('ServerName') AS NVARCHAR(128)));
-					END;
-				ELSE IF @OutputDatabaseName IS NOT NULL
-					AND @OutputSchemaName IS NOT NULL
-					AND @OutputTableName IS NOT NULL
-					AND NOT EXISTS ( SELECT *
-						 FROM   sys.databases
-						 WHERE  QUOTENAME([name]) = @OutputDatabaseName)
-					BEGIN
-						RAISERROR('The specified output database was not found on this server', 16, 0);
-					END;
-				ELSE
-					BEGIN
-						SET @ValidOutputLocation = 0; 
-					END;
-			END;
-																										
-        IF (@ValidOutputLocation = 0 AND @OutputType = 'NONE')
-        BEGIN
-            RAISERROR('Invalid output location and no output asked',12,1);
-            RETURN;
-        END;
-																										
-		/* @OutputTableName lets us export the results to a permanent table */
-		DECLARE @RunID UNIQUEIDENTIFIER;
-		SET @RunID = NEWID();
-		
 		IF (@ValidOutputLocation = 1 AND COALESCE(@OutputServerName, @OutputDatabaseName, @OutputSchemaName, @OutputTableName) IS NOT NULL)
 			BEGIN
 				DECLARE @TableExists BIT;
