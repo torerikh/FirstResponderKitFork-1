@@ -5350,6 +5350,7 @@ BEGIN
 							-- Below should be a copy/paste of the real query
 							-- Make sure all quotes are escaped
 							-- NOTE! information line is skipped from output and the query below
+							-- NOTE! initial columns are not casted to nvarchar due to not outputing informational line
 							SELECT DB_NAME(i.database_id) AS [Database Name],
 								COUNT(*) AS [Number Objects],
 								CAST(SUM(sz.total_reserved_MB)/
