@@ -5935,8 +5935,157 @@ BEGIN
 
     ELSE IF (@Mode=3) /*Missing index Detail*/
     BEGIN
-		IF(@OutputType <> 'NONE')
-		BEGIN;
+		IF (@ValidOutputLocation = 1 AND COALESCE(@OutputServerName, @OutputDatabaseName, @OutputSchemaName, @OutputTableName) IS NOT NULL)
+			BEGIN
+
+				IF NOT @SchemaExists = 1
+					BEGIN
+						RAISERROR (N'Invalid schema name, data could not be saved.', 16, 0);
+						RETURN;
+					END
+
+				IF @TableExists = 0
+					BEGIN
+						SET @StringToExecute = 
+							N'CREATE TABLE @@@OutputDatabaseName@@@.@@@OutputSchemaName@@@.@@@OutputTableName@@@ 
+								(
+									[id] INT IDENTITY(1,1) NOT NULL, 
+									[run_id] UNIQUEIDENTIFIER,
+									[run_datetime] DATETIME, 
+									[server_name] NVARCHAR(128),  
+									[database_name] NVARCHAR(128), 
+									[schema_name] NVARCHAR(128),
+									[table_name] NVARCHAR(128),
+									[magic_benefit_number] BIGINT,
+									[missing_index_details] NVARCHAR(MAX),
+									[avg_total_user_cost] NUMERIC(29,4),
+									[avg_user_impact] NUMERIC(29,1),
+									[user_seeks] BIGINT,
+									[user_scans] BIGINT,
+									[unique_compiles] BIGINT,
+									[equality_columns_with_data_type] NVARCHAR(MAX),
+									[inequality_columns_with_data_type] NVARCHAR(MAX),
+									[included_columns_with_data_type] NVARCHAR(MAX),
+									[index_estimated_impact] NVARCHAR(256),
+									[create_tsql] NVARCHAR(MAX),
+									[more_info] NVARCHAR(600),
+									[display_order] INT,
+									[is_low] BIT,
+									[sample_query_plan] XML,
+									CONSTRAINT [PK_ID_@@@RunID@@@] PRIMARY KEY CLUSTERED ([id] ASC)
+								);';
+		
+						SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputDatabaseName@@@', @OutputDatabaseName);
+						SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputSchemaName@@@', @OutputSchemaName); 
+						SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputTableName@@@', @OutputTableName); 
+						SET @StringToExecute = REPLACE(@StringToExecute, '@@@RunID@@@', @RunID); 
+								
+						IF @ValidOutputServer = 1
+							BEGIN
+								SET @StringToExecute = REPLACE(@StringToExecute,'''','''''');
+								EXEC('EXEC('''+@StringToExecute+''') AT ' + @OutputServerName);
+							END;   
+						ELSE
+							BEGIN
+								EXEC(@StringToExecute);
+							END;
+					END; /* @TableExists = 0 */
+
+					-- Re-check that table now exists (if not we failed creating it)	
+					SET @TableExists = NULL;
+					EXEC sp_executesql @TableExistsSql, N'@TableExists BIT OUTPUT', @TableExists OUTPUT;
+						
+					IF NOT @TableExists = 1
+						BEGIN
+							RAISERROR('Creation of the output table failed.', 16, 0);
+							RETURN;
+						END;
+					SET @StringToExecute = 
+						N'WITH create_date AS (
+									SELECT i.database_id,
+										   i.schema_name,
+										   i.[object_id], 
+										   ISNULL(NULLIF(MAX(DATEDIFF(DAY, i.create_date, SYSDATETIME())), 0), 1) AS create_days
+									FROM #IndexSanity AS i
+									GROUP BY i.database_id, i.schema_name, i.object_id
+									)
+						INSERT @@@OutputServerName@@@.@@@OutputDatabaseName@@@.@@@OutputSchemaName@@@.@@@OutputTableName@@@
+							(
+								[run_id], 
+								[run_datetime], 
+								[server_name], 
+								[database_name], 
+								[schema_name],
+								[table_name],
+								[magic_benefit_number],
+								[missing_index_details],
+								[avg_total_user_cost],
+								[avg_user_impact],
+								[user_seeks],
+								[user_scans],
+								[unique_compiles],
+								[equality_columns_with_data_type],
+								[inequality_columns_with_data_type],
+								[included_columns_with_data_type],
+								[index_estimated_impact],
+								[create_tsql],
+								[more_info],
+								[display_order],
+								[is_low],
+								[sample_query_plan]
+							)
+						SELECT ''@@@RunID@@@'',
+							''@@@GETDATE@@@'',
+							''@@@LocalServerName@@@'',
+							-- Below should be a copy/paste of the real query
+							-- Make sure all quotes are escaped
+							-- NOTE! information line is skipped from output and the query below
+							-- NOTE! CTE block is above insert in the copied SQL
+							mi.database_name AS [Database Name], 
+							mi.[schema_name] AS [Schema], 
+							mi.table_name AS [Table], 
+							CAST((mi.magic_benefit_number / CASE WHEN cd.create_days < @DaysUptime THEN cd.create_days ELSE @DaysUptime END) AS BIGINT)
+								AS [Magic Benefit Number], 
+							mi.missing_index_details AS [Missing Index Details], 
+							mi.avg_total_user_cost AS [Avg Query Cost], 
+							mi.avg_user_impact AS [Est Index Improvement], 
+							mi.user_seeks AS [Seeks], 
+							mi.user_scans AS [Scans],
+							mi.unique_compiles AS [Compiles],
+							mi.equality_columns_with_data_type AS [Equality Columns],
+							mi.inequality_columns_with_data_type AS [Inequality Columns],
+							mi.included_columns_with_data_type AS [Included Columns], 
+							mi.index_estimated_impact AS [Estimated Impact], 
+							mi.create_tsql AS [Create TSQL], 
+							mi.more_info AS [More Info],
+							1 AS [Display Order],
+							mi.is_low,
+							mi.sample_query_plan AS [Sample Query Plan]
+						FROM #MissingIndexes AS mi
+						LEFT JOIN create_date AS cd
+						ON mi.[object_id] =  cd.object_id 
+						AND mi.database_id = cd.database_id
+						AND mi.schema_name = cd.schema_name
+						/* Minimum benefit threshold = 100k/day of uptime OR since table creation date, whichever is lower*/
+						WHERE @ShowAllMissingIndexRequests=1 
+						OR (mi.magic_benefit_number / CASE WHEN cd.create_days < @DaysUptime THEN cd.create_days ELSE @DaysUptime END) >= 100000
+						ORDER BY [Display Order] ASC, [Magic Benefit Number] DESC
+						OPTION (RECOMPILE);';
+	
+					SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputServerName@@@', @OutputServerName);
+					SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputDatabaseName@@@', @OutputDatabaseName);
+					SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputSchemaName@@@', @OutputSchemaName); 
+					SET @StringToExecute = REPLACE(@StringToExecute, '@@@OutputTableName@@@', @OutputTableName); 
+					SET @StringToExecute = REPLACE(@StringToExecute, '@@@RunID@@@', @RunID);
+					SET @StringToExecute = REPLACE(@StringToExecute, '@@@GETDATE@@@', GETDATE());
+					SET @StringToExecute = REPLACE(@StringToExecute, '@@@LocalServerName@@@', CAST(SERVERPROPERTY('ServerName') AS NVARCHAR(128)));
+					EXEC(@StringToExecute);
+
+			END; /* @ValidOutputLocation = 1 */
+		ELSE
+			BEGIN
+				IF(@OutputType <> 'NONE')
+				BEGIN
 			WITH create_date AS (
 						SELECT i.database_id,
 							   i.schema_name,
@@ -5985,17 +6134,21 @@ BEGIN
 				NULL, NULL, NULL, NULL, 0 AS [Display Order], NULL AS is_low, NULL
 			ORDER BY [Display Order] ASC, [Magic Benefit Number] DESC
 			OPTION (RECOMPILE);
-	  	END;
+  				END;
 
-	IF  (@BringThePain = 1
-	AND @DatabaseName IS NOT NULL
-	AND @GetAllDatabases = 0)
 
-	BEGIN
+				IF  (@BringThePain = 1
+				AND @DatabaseName IS NOT NULL
+				AND @GetAllDatabases = 0)
 
-		EXEC sp_BlitzCache @SortOrder = 'sp_BlitzIndex', @DatabaseName = @DatabaseName, @BringThePain = 1, @QueryFilter = 'statement', @HideSummary = 1;
-	                              
-	END;
+				BEGIN
+					EXEC sp_BlitzCache @SortOrder = 'sp_BlitzIndex', @DatabaseName = @DatabaseName, @BringThePain = 1, @QueryFilter = 'statement', @HideSummary = 1;        
+				END;
+
+			END;
+
+
+
 
 
     END; /* End @Mode=3 (index detail)*/
