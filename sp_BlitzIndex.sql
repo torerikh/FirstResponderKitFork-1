@@ -5092,7 +5092,6 @@ BEGIN
 									[run_id] UNIQUEIDENTIFIER,
 									[run_datetime] DATETIME, 
 									[server_name] NVARCHAR(128), 
-
 									[priority] INT NULL,
 									[finding] NVARCHAR(4000) NOT NULL,
 									[database_name] NVARCHAR(128) NULL,
@@ -5159,7 +5158,7 @@ BEGIN
 						''@@@LocalServerName@@@'',
 						-- Below should be a copy/paste of the real query
 						-- Make sure all quotes are escaped
-						SELECT Priority, ISNULL(br.findings_group,N'''') + 
+						Priority, ISNULL(br.findings_group,N'''') + 
 							CASE WHEN ISNULL(br.finding,N'''') <> N'''' THEN N'': '' ELSE N'''' END
 							+ br.finding AS [Finding], 
 						br.[database_name] AS [Database Name],
@@ -5252,7 +5251,7 @@ BEGIN
 									[object_count] INT,
 									[reserved_gb] NUMERIC(29,1),
 									[reserved_lob_gb] NUMERIC(29,1),
-									[reserved_row_overflow_gb],
+									[reserved_row_overflow_gb] NUMERIC(29,1),
 									[clustered_table_count] INT,
 									[clustered_table_gb] NUMERIC(29,1),
 									[nc_index_count] INT,
@@ -5265,7 +5264,7 @@ BEGIN
 									[partioned_gb] NUMERIC(29,1),
 									[filtered_index_count] INT,
 									[indexed_view_count] INT,
-									[max_table_row_count] INT
+									[max_table_row_count] INT,
 									[max_table_gb] NUMERIC(29,1),
 									[max_nc_index_gb] NUMERIC(29,1),
 									[table_count_over_1gb] INT,
@@ -5319,18 +5318,18 @@ BEGIN
 								[reserved_lob_gb],
 								[reserved_row_overflow_gb],
 								[clustered_table_count],
-								[clustered_table_gb]
+								[clustered_table_gb],
 								[nc_index_count],
-								[nc_index_gb]
-								[table_nc_index_ratio]
+								[nc_index_gb],
+								[table_nc_index_ratio],
 								[heap_count],
-								[heap_gb]
+								[heap_gb],
 								[partioned_table_count],
 								[partioned_nc_count],
 								[partioned_gb],
 								[filtered_index_count],
 								[indexed_view_count],
-								[max_table_row_count]
+								[max_table_row_count],
 								[max_table_gb],
 								[max_nc_index_gb],
 								[table_count_over_1gb],
@@ -5351,7 +5350,7 @@ BEGIN
 							-- Make sure all quotes are escaped
 							-- NOTE! information line is skipped from output and the query below
 							-- NOTE! initial columns are not casted to nvarchar due to not outputing informational line
-							SELECT DB_NAME(i.database_id) AS [Database Name],
+							DB_NAME(i.database_id) AS [Database Name],
 								COUNT(*) AS [Number Objects],
 								CAST(SUM(sz.total_reserved_MB)/
 									1024. AS NUMERIC(29,1)) AS [All GB],
@@ -6079,7 +6078,7 @@ BEGIN
 					SET @StringToExecute = REPLACE(@StringToExecute, '@@@RunID@@@', @RunID);
 					SET @StringToExecute = REPLACE(@StringToExecute, '@@@GETDATE@@@', GETDATE());
 					SET @StringToExecute = REPLACE(@StringToExecute, '@@@LocalServerName@@@', CAST(SERVERPROPERTY('ServerName') AS NVARCHAR(128)));
-					EXEC(@StringToExecute);
+					EXEC sp_executesql @StringToExecute, N'@DaysUptime NUMERIC(23,2), @ShowAllMissingIndexRequests BIT', @DaysUptime = @DaysUptime, @ShowAllMissingIndexRequests = @ShowAllMissingIndexRequests;
 
 			END; /* @ValidOutputLocation = 1 */
 		ELSE
